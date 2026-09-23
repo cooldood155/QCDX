@@ -1,0 +1,37 @@
+# Cross target: 64-bit Windows via MinGW-w64 GCC (x86_64-w64-mingw32).
+#
+# Composed as
+#   conan install . -pr:b native -pr:h profiles/x86_64-mingw-w64 --build=missing
+#   cmake --workflow --preset x86_64-mingw-w64-release
+#
+# Named for the toolchain, not the triple, because the sibling ARM64 target
+# needs a different vendor (llvm-mingw) for the same OS and the triple alone
+# would not say so.
+#
+# Change build_folder_vars here and it breaks the matching preset's
+# toolchainFile, which points at:
+# build/windows-x86_64-release/generators/conan_toolchain.cmake.
+
+[settings]
+os=Windows
+arch=x86_64
+compiler=gcc
+compiler.version=16
+compiler.cppstd=23
+compiler.libcxx=libstdc++11
+build_type=Release
+
+# ConanCenter's prebuilt MinGW binaries are usually indexed under these two.
+# Uncomment only if you consume prebuilt Windows-gcc packages; setting them
+# changes every package ID, so flipping them later invalidates the cache.
+#compiler.threads=posix
+#compiler.exception=seh
+
+[conf]
+tools.cmake.cmaketoolchain:generator=Ninja
+tools.cmake.cmaketoolchain:user_toolchain=["{{ os.path.join(profile_dir, "..", "cmake", "toolchains", "x86_64-mingw-w64.cmake") }}"]
+tools.cmake.cmake_layout:build_folder_vars=["settings.os", "settings.arch", "settings.build_type"]
+
+tools.build:compiler_executables={"c": "x86_64-w64-mingw32-gcc", "cpp": "x86_64-w64-mingw32-g++"}
+
+tools.build:skip_test=True

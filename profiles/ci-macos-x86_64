@@ -1,0 +1,17 @@
+# CI: native macOS on the GitHub-hosted runner.
+#
+# No compiler_executables: with compiler=apple-clang the toolchain must be
+# the Xcode one that xcrun resolves. Naming bare 'clang' would let a
+# Homebrew LLVM earlier on PATH win and silently contradict the setting.
+
+[settings]
+os=Macos
+arch=x86_64
+compiler=apple-clang
+compiler.version=21
+compiler.cppstd=23
+compiler.libcxx=libc++
+build_type=Release
+
+[conf]
+tools.cmake.cmaketoolchain:generator=Ninja

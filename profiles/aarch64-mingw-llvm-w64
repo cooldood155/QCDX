@@ -1,0 +1,35 @@
+# Cross target: 64-bit ARM Windows via llvm-mingw (aarch64-w64-mingw32).
+#
+# Composed as
+#   conan install . -pr:b native -pr:h profiles/aarch64-mingw-llvm-w64 --build=missing
+#   cmake --workflow --preset aarch64-mingw-llvm-w64-release
+#
+# llvm-mingw, not MinGW-w64 GCC: binutils/gcc have no aarch64-w64-mingw32
+# target, so clang is the only option here. llvm-mingw does install
+# aarch64-w64-mingw32-gcc and -g++ as compatibility wrappers, but they are
+# clang underneath, so compiler=clang is what actually describes the binary.
+#
+# llvm-mingw is UCRT-only, so there is no -mucrt here; the flag is a
+# MinGW-w64 GCC driver option and clang rejects it.
+#
+# Change build_folder_vars here and it breaks the matching preset's
+# toolchainFile, which points at
+# build/Windows-armv8-Release/conan_toolchain.cmake.
+
+[settings]
+os=Windows
+arch=armv8
+compiler=clang
+compiler.version=22
+compiler.cppstd=23
+compiler.libcxx=libc++
+build_type=Release
+
+[conf]
+tools.cmake.cmaketoolchain:generator=Ninja
+tools.cmake.cmaketoolchain:user_toolchain=["{{ os.path.join(profile_dir, "..", "cmake", "toolchains", "aarch64-mingw-llvm-w64.cmake") }}"]
+tools.cmake.cmake_layout:build_folder_vars=["settings.os", "settings.arch", "settings.build_type"]
+
+tools.build:compiler_executables={"c": "aarch64-w64-mingw32-clang", "cpp": "aarch64-w64-mingw32-clang++"}
+
+tools.build:skip_test=True

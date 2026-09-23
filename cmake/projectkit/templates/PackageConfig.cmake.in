@@ -1,0 +1,11 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+foreach(pk_dependency IN ITEMS @PK_PACKAGE_DEPENDENCIES@)
+  find_dependency(${pk_dependency})
+endforeach()
+
+include("${CMAKE_CURRENT_LIST_DIR}/@PK_EXPORT_FILE@")
+
+check_required_components("@PK_PACKAGE_NAME@")

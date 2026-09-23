@@ -1,0 +1,5 @@
+pk_create_library(
+  NAME qcdx
+  LOCKED_STATIC
+  REQUIRE_SOURCES
+  REQUIRE_PUBLIC_HEADERS)

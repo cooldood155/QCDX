@@ -1,0 +1,155 @@
+# ==========================================
+# IDEs / Editors
+# ==========================================
+
+# VS Code
+.vscode/
+
+# Visual Studio
+.vs/
+[Dd]ebug/
+[Rr]elease/
+*.user
+*.suo
+*.perforated
+*.shproj
+
+# JetBrains (CLion)
+.idea/
+cmake-build-*/
+
+# Xcode
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspective3
+xcuserdata/
+
+# Vim / Neovim
+[._]*.s[a-v][a-z]
+!*.svg
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+*.un~
+Session.vim
+Sessionx.vim
+.netrwhist
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+
+# ==========================================
+# Language Servers & Tooling
+# ==========================================
+
+# Clangd (C/C++ Language Server)
+.clangd/
+.cache/
+compile_commands.json
+
+# ==========================================
+# OS-Specific Files
+# ==========================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+.Trashes
+.Spotlight-V100
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.tmp
+*.lnk
+
+# ==========================================
+# Build Systems / Generators
+# ==========================================
+
+# CMake
+build/
+build-*/
+cmake/projectkit/test_package/build/
+CMakeUserPresets.json
+
+# Ninja
+.ninja_deps
+.ninja_log
+
+# Package Manager (Conan)
+ConanPresets.json
+
+# ==========================================
+# Compiled Artifacts, Libraries & Debugging
+# ==========================================
+
+# Prerequisites
+*.d
+
+# Object files
+*.o
+*.obj
+*.ko
+*.gch
+*.pch
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+
+# Shared libraries
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# MSVC Debugging & Profiling (Windows)
+*.pdb
+*.idb
+*.ilk
+*.pgd
+*.pgc
+*.ipdb
+*.iobj
+*.rsp
+
+# Apple Clang Debug Symbols (macOS)
+*.dSYM/
+
+# Core dumps (Linux / macOS crashes)
+/core
+core.*
+
+# Negate core.* including C/C++
+!core.[ch]*
+
+
+# GCC/Clang Code Coverage & Profiling
+*.gcno
+*.gcda
+*.gcov
+
+# Address/Memory Sanitizer logs
+asan.log.*
+ubsan.log.*
+
+# ==========================================
+# In-Project Deamed Personal Directories
+# ==========================================
+
+docs/archive
+docs/notes

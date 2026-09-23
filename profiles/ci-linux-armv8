@@ -1,0 +1,19 @@
+# CI: native 64-bit ARM Linux on the GitHub-hosted runner.
+#
+# The compiler settings and the compiler_executables MUST name the same
+# toolchain. Conan hashes the [settings] into the package ID but not the
+# executables, a mismatch produces binaries built by one compiler that are
+# cached under another compiler's ID.
+
+[settings]
+os=Linux
+arch=armv8
+compiler=gcc
+compiler.version=13
+compiler.cppstd=23
+compiler.libcxx=libstdc++11
+build_type=Release
+
+[conf]
+tools.cmake.cmaketoolchain:generator=Ninja
+tools.build:compiler_executables={"c": "gcc-13", "cpp": "g++-13"}
