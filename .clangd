@@ -1,0 +1,6 @@
+CompileFlags:
+  CompilationDatabase: build/native-release
+  Remove:
+    - -fmodules-ts
+    - -fmodule-mapper=*
+    - -fdeps-*

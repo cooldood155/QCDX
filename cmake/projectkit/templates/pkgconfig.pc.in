@@ -1,0 +1,11 @@
+prefix=@PK_PC_PREFIX@
+exec_prefix=@PK_PC_EXEC_PREFIX@
+libdir=@PK_PC_LIBDIR@
+includedir=@PK_PC_INCLUDEDIR@
+
+Name: @PK_PC_NAME@
+Description: @PK_PC_DESCRIPTION@
+Version: @PK_PC_VERSION@
+Requires:@PK_PC_REQUIRES@
+Libs: -L${libdir} -l@PK_PC_LIBRARY_NAME@
+Cflags: -I${includedir}@PK_PC_CFLAGS@

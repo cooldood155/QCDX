@@ -1,0 +1,21 @@
+# Applied on-top-of the build systems Conan profile (-pr:b / -pr:a).
+# Defines no build_folder_vars, every configuration is generated at
+# build/<BuildType> and one native-* preset serves Linux, Windows/MSYS2 and
+# macOS alike.
+#
+# This profile is always the machine doing the compiling: -pr:a == host & build
+# machine are the same, -pr:b=... -pr:h=... == cross-compiling (different host,
+# native build).
+#
+#   conan install . -pr:a profiles/native -s build_type=Release --build=missing
+#   cmake --workflow --preset native-release
+
+include(default)
+
+[settings]
+compiler.cppstd=26
+compiler.cstd=23
+
+[conf]
+tools.cmake.cmaketoolchain:generator=Ninja
+tools.build:skip_test=False

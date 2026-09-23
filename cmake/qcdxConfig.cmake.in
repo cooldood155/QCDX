@@ -1,0 +1,39 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+include("${CMAKE_CURRENT_LIST_DIR}/qcdxTargets.cmake")
+
+if(NOT TARGET qcdx::qcdx)
+  if(TARGET qcdx::shared OR TARGET qcdx::static)
+    if(BUILD_SHARED_LIBS AND TARGET qcdx::shared)
+      set(_qcdx_variant qcdx::shared)
+    elseif(NOT BUILD_SHARED_LIBS AND TARGET qcdx::static)
+      set(_qcdx_variant qcdx::static)
+    elseif(TARGET qcdx::shared)
+      set(_qcdx_variant qcdx::shared)
+    else()
+      set(_qcdx_variant qcdx::static)
+    endif()
+
+    add_library(qcdx::qcdx INTERFACE IMPORTED)
+    target_link_libraries(qcdx::qcdx INTERFACE ${_qcdx_variant})
+    unset(_qcdx_variant)
+  else()
+    set(qcdx_FOUND FALSE)
+    set(qcdx_NOT_FOUND_MESSAGE
+      "The qcdx package in '${CMAKE_CURRENT_LIST_DIR}' exports no library target.")
+    return()
+  endif()
+endif()
+
+foreach(_qcdx_component IN LISTS qcdx_FIND_COMPONENTS)
+  if(TARGET qcdx::${_qcdx_component})
+    set(qcdx_${_qcdx_component}_FOUND TRUE)
+  else()
+    set(qcdx_${_qcdx_component}_FOUND FALSE)
+  endif()
+endforeach()
+unset(_qcdx_component)
+
+check_required_components(qcdx)

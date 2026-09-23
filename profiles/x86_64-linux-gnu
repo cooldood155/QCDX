@@ -1,0 +1,43 @@
+# Cross target: 64-bit x86 Linux, via x86_64-linux-gnu.
+#
+# Composed as
+#   conan install . -pr:b native -pr:h profiles/x86_64-linux-gnu --build=missing
+#   cmake --workflow --preset x86_64-linux-gnu-release
+#
+# Named for the GNU triple, which is what cmake/toolchains/x86_64-linux-gnu.cmake
+# sets as QCDX_TARGET_TRIPLE and what the compiler binaries are called.
+# Conan's own spelling of the arch (x86_64) is what lands in the build
+# folder, so the two names differ on purpose.
+#
+# Change build_folder_vars here and it breaks the matching preset's
+# toolchainFile, which points at
+# build/Linux-x86_64-Release/conan_toolchain.cmake.
+
+[settings]
+os=Linux
+arch=x86_64
+compiler=gcc
+compiler.version=13
+compiler.cppstd=23
+compiler.libcxx=libstdc++11
+build_type=Release
+
+[conf]
+tools.cmake.cmaketoolchain:generator=Ninja
+tools.cmake.cmaketoolchain:user_toolchain=["{{ os.path.join(profile_dir, "..", "cmake", "toolchains", "x86_64-linux-gnu.cmake") }}"]
+tools.cmake.cmake_layout:build_folder_vars=["settings.os", "settings.arch", "settings.build_type"]
+tools.build:skip_test=True
+
+# Baked into conan_toolchain.cmake as CMAKE_SYSROOT, so a plain
+# cmake --preset works with no environment activation. The toolchain file
+# reads CMAKE_SYSROOT (not this variable) and appends it to
+# CMAKE_FIND_ROOT_PATH, so the name below is ours to choose.
+#
+# Set only when QCDX_X86_64_SYSROOT is exported. A distro cross toolchain
+# (Debian/Ubuntu gcc-x86-64-linux-gnu, which is what CI uses) knows its
+# own sysroot and must NOT be given one; a bare Linaro/vendor toolchain, and
+# any non-Linux build machine, must be given one.
+
+{% if os.getenv("QCDX_X86_64_SYSROOT") %}
+tools.build:sysroot={{ os.getenv("QCDX_X86_64_SYSROOT") }}
+{% endif %}

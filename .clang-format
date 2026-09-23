@@ -1,0 +1,27 @@
+---
+Language: Cpp
+BasedOnStyle: LLVM
+
+# clang-format 18 rejects `c++23`
+Standard: c++20
+
+ColumnLimit: 80
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+
+PointerAlignment: Right
+BreakBeforeBraces: Attach
+AllowShortFunctionsOnASingleLine: None
+
+# src/core.cpp nests `#  define` inside `#ifndef`. Without both of these
+# clang-format flattens the directive back to column 0, and PPIndentWidth's
+# default of -1 would indent it by IndentWidth (4) instead of 2.
+IndentPPDirectives: AfterHash
+PPIndentWidth: 2
+
+IncludeBlocks: Preserve
+
+LineEnding: LF
+InsertNewlineAtEOF: true
+...

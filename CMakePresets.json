@@ -1,0 +1,593 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 30, "patch": 0 },
+
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": { "type": "BOOL", "value": "ON" }
+      }
+    },
+
+    {
+      "name": "cross-base",
+      "hidden": true,
+      "inherits": "base",
+      "cacheVariables": {
+        "qcdxHostTools_DIR": { "type": "PATH", "value": "${sourceDir}/build/host-tools" }
+      }
+    },
+
+    {
+      "name": "debug-base",
+      "hidden": true,
+      "toolchainFile": "${sourceDir}/build/Debug/generators/conan_toolchain.cmake",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "release-base",
+      "hidden": true,
+      "toolchainFile": "${sourceDir}/build/Release/generators/conan_toolchain.cmake",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "relwithdebinfo-base",
+      "hidden": true,
+      "toolchainFile": "${sourceDir}/build/RelWithDebInfo/generators/conan_toolchain.cmake",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
+    },
+    {
+      "name": "minsizerel-base",
+      "hidden": true,
+      "toolchainFile": "${sourceDir}/build/MinSizeRel/generators/conan_toolchain.cmake",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "MinSizeRel" }
+    },
+
+    {
+      "name": "host-tools",
+      "displayName": "Build host tools only, in Release mode",
+      "inherits": ["base", "release-base"],
+      "cacheVariables": {
+        "QCDX_BUILD_APPS": "OFF",
+        "QCDX_BUILD_TESTS": "OFF",
+        "QCDX_LIBRARY_TYPE": "NONE",
+        "QCDX_SA_ALL": "OFF"
+      }
+    },
+
+    {
+      "name": "native-debug",
+      "displayName": "Native / Debug",
+      "description": "Requires: conan install . -pr:a profiles/native -s build_type=Debug --build=missing",
+      "inherits": ["base", "debug-base"]
+    },
+    {
+      "name": "native-release",
+      "displayName": "Native / Release",
+      "description": "Requires: conan install . -pr:a profiles/native -s build_type=Release --build=missing",
+      "inherits": ["base", "release-base"]
+    },
+    {
+      "name": "native-relwithdebinfo",
+      "displayName": "Native / RelWithDebInfo",
+      "description": "Requires: conan install . -pr:a profiles/native -s build_type=RelWithDebInfo --build=missing",
+      "inherits": ["base", "relwithdebinfo-base"]
+    },
+    {
+      "name": "native-minsizerel",
+      "displayName": "Native / MinSizeRel",
+      "description": "Requires: conan install . -pr:a profiles/native -s build_type=MinSizeRel --build=missing",
+      "inherits": ["base", "minsizerel-base"]
+    },
+
+    {
+      "name": "x86_64-linux-gnu-debug",
+      "displayName": "Cross / Debug / x86_64-linux-gnu",
+      "description": "Cross to Linux x86_64 via x86_64-linux-gnu. Requires: conan install . -pr:b profiles/native -pr:h profiles/x86_64-linux-gnu -s build_type=Debug --build=missing",
+      "inherits": "cross-base",
+      "toolchainFile": "${sourceDir}/build/linux-x86_64-debug/generators/conan_toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "x86_64-linux-gnu-release",
+      "displayName": "Cross / Release / x86_64-linux-gnu",
+      "description": "Cross to Linux x86_64 via x86_64-linux-gnu. Requires: conan install . -pr:b profiles/native -pr:h profiles/x86_64-linux-gnu -s build_type=Release --build=missing",
+      "inherits": "cross-base",
+      "toolchainFile": "${sourceDir}/build/linux-x86_64-release/generators/conan_toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "x86_64-linux-gnu-relwithdebinfo",
+      "displayName": "Cross / RelWithDebInfo / x86_64-linux-gnu",
+      "description": "Cross to Linux x86_64 via x86_64-linux-gnu. Requires: conan install . -pr:b profiles/native -pr:h profiles/x86_64-linux-gnu -s build_type=RelWithDebInfo --build=missing",
+      "inherits": "cross-base",
+      "toolchainFile": "${sourceDir}/build/linux-x86_64-relwithdebinfo/generators/conan_toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "x86_64-linux-gnu-minsizerel",
+      "displayName": "Cross / MinSizeRel / x86_64-linux-gnu",
+      "description": "Cross to Linux x86_64 via x86_64-linux-gnu. Requires: conan install . -pr:b profiles/native -pr:h profiles/x86_64-linux-gnu -s build_type=MinSizeRel --build=missing",
+      "inherits": "cross-base",
+      "toolchainFile": "${sourceDir}/build/linux-x86_64-minsizerel/generators/conan_toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "MinSizeRel"
+      }
+    },
+
+    {
+      "name": "aarch64-linux-gnu-debug",
+      "displayName": "Cross / Debug / aarch64-linux-gnu",
+      "description": "Cross to Linux armv8 via aarch64-linux-gnu. Requires: conan install . -pr:b profiles/native -pr:h profiles/aarch64-linux-gnu -s build_type=Debug --build=missing",
+      "inherits": "cross-base",
+      "toolchainFile": "${sourceDir}/build/linux-armv8-debug/generators/conan_toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "aarch64-linux-gnu-release",
+      "displayName": "Cross / Release / aarch64-linux-gnu",
+      "description": "Cross to Linux armv8 via aarch64-linux-gnu. Requires: conan install . -pr:b profiles/native -pr:h profiles/aarch64-linux-gnu -s build_type=Release --build=missing",
+      "inherits": "cross-base",
+      "toolchainFile": "${sourceDir}/build/linux-armv8-release/generators/conan_toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "aarch64-linux-gnu-relwithdebinfo",
+      "displayName": "Cross / RelWithDebInfo / aarch64-linux-gnu",
+      "description": "Cross to Linux armv8 via aarch64-linux-gnu. Requires: conan install . -pr:b profiles/native -pr:h profiles/aarch64-linux-gnu -s build_type=RelWithDebInfo --build=missing",
+      "inherits": "cross-base",
+      "toolchainFile": "${sourceDir}/build/linux-armv8-relwithdebinfo/generators/conan_toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "aarch64-linux-gnu-minsizerel",
+      "displayName": "Cross / MinSizeRel / aarch64-linux-gnu",
+      "description": "Cross to Linux armv8 via aarch64-linux-gnu. Requires: conan install . -pr:b profiles/native -pr:h profiles/aarch64-linux-gnu -s build_type=MinSizeRel --build=missing",
+      "inherits": "cross-base",
+      "toolchainFile": "${sourceDir}/build/linux-armv8-minsizerel/generators/conan_toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "MinSizeRel"
+      }
+    },
+
+    {
+      "name": "x86_64-mingw-w64-debug",
+      "displayName": "Cross / Debug / x86_64-mingw-w64",
+      "description": "Cross to Windows x86_64 via MinGW-w64 GCC. Requires: conan install . -pr:b profiles/native -pr:h profiles/x86_64-mingw-w64 -s build_type=Debug --build=missing",
+      "inherits": "cross-base",
+      "toolchainFile": "${sourceDir}/build/windows-x86_64-debug/generators/conan_toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "x86_64-mingw-w64-release",
+      "displayName": "Cross / Release / x86_64-mingw-w64",
+      "description": "Cross to Windows x86_64 via MinGW-w64 GCC. Requires: conan install . -pr:b profiles/native -pr:h profiles/x86_64-mingw-w64 -s build_type=Release --build=missing",
+      "inherits": "cross-base",
+      "toolchainFile": "${sourceDir}/build/windows-x86_64-release/generators/conan_toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "x86_64-mingw-w64-relwithdebinfo",
+      "displayName": "Cross / RelWithDebInfo / x86_64-mingw-w64",
+      "description": "Cross to Windows x86_64 via MinGW-w64 GCC. Requires: conan install . -pr:b profiles/native -pr:h profiles/x86_64-mingw-w64 -s build_type=RelWithDebInfo --build=missing",
+      "inherits": "cross-base",
+      "toolchainFile": "${sourceDir}/build/windows-x86_64-relwithdebinfo/generators/conan_toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "x86_64-mingw-w64-minsizerel",
+      "displayName": "Cross / MinSizeRel / x86_64-mingw-w64",
+      "description": "Cross to Windows x86_64 via MinGW-w64 GCC. Requires: conan install . -pr:b profiles/native -pr:h profiles/x86_64-mingw-w64 -s build_type=MinSizeRel --build=missing",
+      "inherits": "cross-base",
+      "toolchainFile": "${sourceDir}/build/windows-x86_64-minsizerel/generators/conan_toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "MinSizeRel"
+      }
+    },
+
+    {
+      "name": "aarch64-mingw-llvm-w64-debug",
+      "displayName": "Cross / Debug / aarch64-mingw-llvm-w64",
+      "description": "Cross to Windows armv8 via llvm-mingw. Requires: conan install . -pr:b profiles/native -pr:h profiles/aarch64-mingw-llvm-w64 -s build_type=Debug --build=missing",
+      "inherits": "cross-base",
+      "toolchainFile": "${sourceDir}/build/windows-armv8-debug/generators/conan_toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "aarch64-mingw-llvm-w64-release",
+      "displayName": "Cross / Release / aarch64-mingw-llvm-w64",
+      "description": "Cross to Windows armv8 via llvm-mingw. Requires: conan install . -pr:b profiles/native -pr:h profiles/aarch64-mingw-llvm-w64 -s build_type=Release --build=missing",
+      "inherits": "cross-base",
+      "toolchainFile": "${sourceDir}/build/windows-armv8-release/generators/conan_toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "aarch64-mingw-llvm-w64-relwithdebinfo",
+      "displayName": "Cross / RelWithDebInfo / aarch64-mingw-llvm-w64",
+      "description": "Cross to Windows armv8 via llvm-mingw. Requires: conan install . -pr:b profiles/native -pr:h profiles/aarch64-mingw-llvm-w64 -s build_type=RelWithDebInfo --build=missing",
+      "inherits": "cross-base",
+      "toolchainFile": "${sourceDir}/build/windows-armv8-relwithdebinfo/generators/conan_toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "aarch64-mingw-llvm-w64-minsizerel",
+      "displayName": "Cross / MinSizeRel / aarch64-mingw-llvm-w64",
+      "description": "Cross to Windows armv8 via llvm-mingw. Requires: conan install . -pr:b profiles/native -pr:h profiles/aarch64-mingw-llvm-w64 -s build_type=MinSizeRel --build=missing",
+      "inherits": "cross-base",
+      "toolchainFile": "${sourceDir}/build/windows-armv8-minsizerel/generators/conan_toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "MinSizeRel"
+      }
+    }
+  ],
+
+  "buildPresets": [
+    { "name": "native-debug",
+      "configurePreset": "native-debug" },
+    { "name": "native-release",
+      "configurePreset": "native-release" },
+    { "name": "native-relwithdebinfo",
+      "configurePreset": "native-relwithdebinfo" },
+    { "name": "native-minsizerel",
+      "configurePreset": "native-minsizerel" },
+
+    { "name": "host-tools",
+      "configurePreset": "host-tools",
+      "displayName": "Host tools only (qcdx_codegen)",
+      "targets": ["qcdx_codegen"] },
+
+    { "name": "x86_64-linux-gnu-debug",
+      "configurePreset": "x86_64-linux-gnu-debug"},
+    { "name": "x86_64-linux-gnu-release",
+      "configurePreset": "x86_64-linux-gnu-release" },
+    { "name": "x86_64-linux-gnu-relwithdebinfo",
+      "configurePreset": "x86_64-linux-gnu-relwithdebinfo" },
+    { "name": "x86_64-linux-gnu-minsizerel",
+      "configurePreset": "x86_64-linux-gnu-minsizerel" },
+
+    { "name": "aarch64-linux-gnu-debug",
+      "configurePreset": "aarch64-linux-gnu-debug" },
+    { "name": "aarch64-linux-gnu-release",
+      "configurePreset": "aarch64-linux-gnu-release" },
+    { "name": "aarch64-linux-gnu-relwithdebinfo",
+      "configurePreset": "aarch64-linux-gnu-relwithdebinfo" },
+    { "name": "aarch64-linux-gnu-minsizerel",
+      "configurePreset": "aarch64-linux-gnu-minsizerel" },
+
+    { "name": "x86_64-mingw-w64-debug",
+      "configurePreset": "x86_64-mingw-w64-debug" },
+    { "name": "x86_64-mingw-w64-release",
+      "configurePreset": "x86_64-mingw-w64-release" },
+    { "name": "x86_64-mingw-w64-relwithdebinfo",
+      "configurePreset": "x86_64-mingw-w64-relwithdebinfo" },
+    { "name": "x86_64-mingw-w64-minsizerel",
+      "configurePreset": "x86_64-mingw-w64-minsizerel" },
+
+    { "name": "aarch64-mingw-llvm-w64-debug",
+      "configurePreset": "aarch64-mingw-llvm-w64-debug" },
+    { "name": "aarch64-mingw-llvm-w64-release",
+      "configurePreset": "aarch64-mingw-llvm-w64-release" },
+    { "name": "aarch64-mingw-llvm-w64-relwithdebinfo",
+      "configurePreset": "aarch64-mingw-llvm-w64-relwithdebinfo" },
+    { "name": "aarch64-mingw-llvm-w64-minsizerel",
+      "configurePreset": "aarch64-mingw-llvm-w64-minsizerel" }
+  ],
+
+  "testPresets": [
+    {
+      "name": "native-debug",
+      "configurePreset": "native-debug",
+      "output": { "outputOnFailure": true },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": false
+      }
+    },
+    {
+      "name": "native-release",
+      "configurePreset": "native-release",
+      "output": { "outputOnFailure": true },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": false
+      }
+    },
+    {
+      "name": "native-relwithdebinfo",
+      "configurePreset": "native-relwithdebinfo",
+      "output": { "outputOnFailure": true },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": false
+      }
+    },
+    {
+      "name": "native-minsizerel",
+      "configurePreset": "native-minsizerel",
+      "output": { "outputOnFailure": true },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": false
+      }
+    }
+  ],
+
+  "workflowPresets": [
+    {
+      "name": "native-debug",
+      "steps": [
+        { "type": "configure",
+          "name": "native-debug"
+        },
+        { "type": "build",
+          "name": "native-debug"
+        },
+        { "type": "test",
+          "name": "native-debug"
+        }
+      ]
+    },
+    {
+      "name": "native-release",
+      "steps": [
+        { "type": "configure",
+          "name": "native-release"
+        },
+        { "type": "build",
+          "name": "native-release"
+        },
+        { "type": "test",
+          "name": "native-release"
+        }
+      ]
+    },
+    {
+      "name": "native-relwithdebinfo",
+      "steps": [
+        { "type": "configure",
+          "name": "native-relwithdebinfo"
+        },
+        { "type": "build",
+          "name": "native-relwithdebinfo"
+        },
+        { "type": "test",
+          "name": "native-relwithdebinfo"
+        }
+      ]
+    },
+    {
+      "name": "native-minsizerel",
+      "steps": [
+        { "type": "configure",
+          "name": "native-minsizerel"
+        },
+        { "type": "build",
+          "name": "native-minsizerel"
+        },
+        { "type": "test",
+          "name": "native-minsizerel"
+        }
+      ]
+    },
+
+    {
+      "name": "host-tools",
+      "steps": [
+        { "type": "configure",
+          "name": "host-tools"
+        },
+        { "type": "build",
+          "name": "host-tools"
+        }
+      ]
+    },
+
+    {
+      "name": "x86_64-linux-gnu-debug",
+      "steps": [
+        { "type": "configure",
+          "name": "x86_64-linux-gnu-debug"
+        },
+        { "type": "build",
+          "name": "x86_64-linux-gnu-debug"
+        }
+      ]
+    },
+    {
+      "name": "x86_64-linux-gnu-release",
+      "steps": [
+        { "type": "configure",
+          "name": "x86_64-linux-gnu-release"
+        },
+        { "type": "build",
+          "name": "x86_64-linux-gnu-release"
+        }
+      ]
+    },
+    {
+      "name": "x86_64-linux-gnu-relwithdebinfo",
+      "steps": [
+        { "type": "configure",
+          "name": "x86_64-linux-gnu-relwithdebinfo"
+        },
+        { "type": "build",
+          "name": "x86_64-linux-gnu-relwithdebinfo"
+        }
+      ]
+    },
+    {
+      "name": "x86_64-linux-gnu-minsizerel",
+      "steps": [
+        { "type": "configure",
+          "name": "x86_64-linux-gnu-minsizerel"
+        },
+        { "type": "build",
+          "name": "x86_64-linux-gnu-minsizerel"
+        }
+      ]
+    },
+
+    {
+      "name": "aarch64-linux-gnu-debug",
+      "steps": [
+        { "type": "configure",
+          "name": "aarch64-linux-gnu-debug"
+        },
+        { "type": "build",
+          "name": "aarch64-linux-gnu-debug"
+        }
+      ]
+    },
+    {
+      "name": "aarch64-linux-gnu-release",
+      "steps": [
+        { "type": "configure",
+          "name": "aarch64-linux-gnu-release"
+        },
+        { "type": "build",
+          "name": "aarch64-linux-gnu-release"
+        }
+      ]
+    },
+    {
+      "name": "aarch64-linux-gnu-relwithdebinfo",
+      "steps": [
+        { "type": "configure",
+          "name": "aarch64-linux-gnu-relwithdebinfo"
+        },
+        { "type": "build",
+          "name": "aarch64-linux-gnu-relwithdebinfo"
+        }
+      ]
+    },
+    {
+      "name": "aarch64-linux-gnu-minsizerel",
+      "steps": [
+        { "type": "configure",
+          "name": "aarch64-linux-gnu-minsizerel"
+        },
+        { "type": "build",
+          "name": "aarch64-linux-gnu-minsizerel"
+        }
+      ]
+    },
+
+    {
+      "name": "x86_64-mingw-w64-debug",
+      "steps": [
+        { "type": "configure",
+          "name": "x86_64-mingw-w64-debug"
+        },
+        { "type": "build",
+          "name": "x86_64-mingw-w64-debug"
+        }
+      ]
+    },
+    {
+      "name": "x86_64-mingw-w64-release",
+      "steps": [
+        { "type": "configure",
+          "name": "x86_64-mingw-w64-release"
+        },
+        { "type": "build",
+          "name": "x86_64-mingw-w64-release"
+        }
+      ]
+    },
+    {
+      "name": "x86_64-mingw-w64-relwithdebinfo",
+      "steps": [
+        { "type": "configure",
+          "name": "x86_64-mingw-w64-relwithdebinfo"
+        },
+        { "type": "build",
+          "name": "x86_64-mingw-w64-relwithdebinfo"
+        }
+      ]
+    },
+    {
+      "name": "x86_64-mingw-w64-minsizerel",
+      "steps": [
+        { "type": "configure",
+          "name": "x86_64-mingw-w64-minsizerel"
+        },
+        { "type": "build",
+          "name": "x86_64-mingw-w64-minsizerel"
+        }
+      ]
+    },
+
+    {
+      "name": "aarch64-mingw-llvm-w64-debug",
+      "steps": [
+        { "type": "configure",
+          "name": "aarch64-mingw-llvm-w64-debug"
+        },
+        { "type": "build",
+          "name": "aarch64-mingw-llvm-w64-debug"
+        }
+      ]
+    },
+    {
+      "name": "aarch64-mingw-llvm-w64-release",
+      "steps": [
+        { "type": "configure",
+          "name": "aarch64-mingw-llvm-w64-release"
+        },
+        { "type": "build",
+          "name": "aarch64-mingw-llvm-w64-release"
+        }
+      ]
+    },
+    {
+      "name": "aarch64-mingw-llvm-w64-relwithdebinfo",
+      "steps": [
+        { "type": "configure",
+          "name": "aarch64-mingw-llvm-w64-relwithdebinfo"
+        },
+        { "type": "build",
+          "name": "aarch64-mingw-llvm-w64-relwithdebinfo"
+        }
+      ]
+    },
+    {
+      "name": "aarch64-mingw-llvm-w64-minsizerel",
+      "steps": [
+        { "type": "configure",
+          "name": "aarch64-mingw-llvm-w64-minsizerel"
+        },
+        { "type": "build",
+          "name": "aarch64-mingw-llvm-w64-minsizerel"
+        }
+      ]
+    }
+  ]
+}
