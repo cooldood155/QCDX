@@ -454,6 +454,7 @@ pk_stage_consumer() {
   pk_try "configure consumer (${PK_BUILD_TYPE})" cmake -S "$PK_CONSUMER_DIR" \
     -B "$PK_CONSUMER_DIR/b" -G Ninja \
     -DCMAKE_BUILD_TYPE="$PK_BUILD_TYPE" \
+    -DCMAKE_TOOLCHAIN_FILE="${PK_REPO_ROOT}/build/${PK_BUILD_TYPE}/generators/conan_toolchain.cmake" \
     -DCMAKE_PREFIX_PATH="${PK_REPO_ROOT}/stage" || return 1
   pk_try "build consumer (${PK_BUILD_TYPE})" \
     cmake --build "$PK_CONSUMER_DIR/b" || return 1
