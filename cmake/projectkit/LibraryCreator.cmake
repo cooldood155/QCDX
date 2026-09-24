@@ -190,7 +190,8 @@ function(pk_create_library)
     NAME
     KIND
     SOURCE_DIR
-    INCLUDE_DIR)
+    INCLUDE_DIR
+    EXPORT_SET)
 
   set(multi_value_args
     SOURCES
@@ -212,6 +213,10 @@ function(pk_create_library)
     message(FATAL_ERROR
       "pk_create_library (func): unrecognized arguments for "
       "'${ARG_NAME}': ${ARG_UNPARSED_ARGUMENTS}")
+  endif()
+
+  if(NOT ARG_EXPORT_SET)
+    set(ARG_EXPORT_SET "${PROJECT_NAME}Targets")
   endif()
 
   if(NOT ARG_KIND AND NOT ARG_VERBATIM)
@@ -491,7 +496,7 @@ function(pk_create_library)
     endif()
 
     install(TARGETS ${${target_list_var}}
-      EXPORT  ${ARG_NAME}Targets
+      EXPORT ${ARG_EXPORT_SET}
       RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
       LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
       ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"

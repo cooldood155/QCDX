@@ -108,7 +108,7 @@ PK_TYPE_STAGES host_tools_for_cross, cross_build, library_matrix
 | `library_matrix` | Configures, builds and runs ctest once per entry in `PK_LIBRARY_TYPES`, so `STATIC`, `SHARED` and `STATIC+SHARED` are all exercised. |
 | `auto_discovery` | Writes a probe source into the scratch directory, rebuilds, and checks the file was picked up. This is what proves `CONFIGURE_DEPENDS` globbing works. |
 | `install` | Installs to `stage/`, checks every file from `pk_expected_install_files`, prints the `.pc` file and runs `pkg-config` on it when available. |
-| `consumer` | Generates a throwaway project that only ever sees installed files, calls `find_package`, links the imported target and runs the result. |
+| `consumer` | Generates a throwaway project that sees only installed files and the Conan dependency configs, calls `find_package`, links the imported target and runs the result. |
 | `cpack` | Builds the binary and source packages. |
 | `host_tools` | Configures the `host-tools` preset with the current build type and its matching toolchain, which also proves `<PREFIX>_LIBRARY_TYPE=NONE` is guarded. |
 | `host_tools_for_cross` | Same, but with the native profile, since host tools run on the build machine. |
