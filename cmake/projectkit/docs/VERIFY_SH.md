@@ -115,6 +115,12 @@ PK_TYPE_STAGES host_tools_for_cross, cross_build, library_matrix
 | `cross_build` | `conan install`, configure and build with the cross preset. No tests. |
 | `reset` | Removes generated output unless `--keep` was given. |
 
+A stage that later stages depend on stops the rest of its list when it
+fails. `environment` stops the whole target; `workflow`, `cross_build` and
+`host_tools_for_cross` stop the remaining stages for that build type, which
+is recorded as a single skip, and the next build type still runs. Any other
+stage reports its failure and continues on with the other stages.
+
 Each target runs in a subshell, so per-target configuration and pass/fail
 counters cannot leak into the next target.
 

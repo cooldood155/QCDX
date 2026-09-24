@@ -545,8 +545,9 @@ pk_target_summary() {
   return 0
 }
 
-# Runs one whitespace separated stage list. Returns non-zero only when the
-# environment stage fails, since that makes every later stage meaningless.
+# Runs one whitespace separated stage list. Returns non-zero when a stage
+# that later stages depend on fails (environment, or a stage that produces
+# the build tree), skipping the rest of the list.
 pk_run_stage_list() {
   local stage_name
   for stage_name in $1; do
@@ -555,10 +556,13 @@ pk_run_stage_list() {
       continue
     fi
 
-    "pk_stage_${stage_name}"
-
-    if [[ "$stage_name" == "environment" && -n "$PK_FAILURES" ]]; then
-      return 1
+    if ! "pk_stage_${stage_name}"; then
+      case "$stage_name" in
+        environment|workflow|host_tools_for_cross|cross_build)
+          pk_skip "remaining ${PK_BUILD_TYPE:-setup} stages: ${stage_name} failed"
+          return 1
+          ;;
+      esac
     fi
   done
   return 0
