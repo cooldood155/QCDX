@@ -1,0 +1,145 @@
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CONAN_VERSION: "2.32.0"
+  LLVM_MINGW_TAG: "20260616"
+  # Linux x86_64 UCRT build of the pinned release; the checksum ensures the pin is exact.
+  LLVM_MINGW_ASSET: "llvm-mingw-20260616-ucrt-ubuntu-22.04-x86_64.tar.xz"
+  LLVM_MINGW_SHA256: "534b92e067b22a6b4441f48ae9240a3341b17825d04d577eab0cf85c44b4deda"
+
+jobs:
+  unix:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: linux-x86_64,                 os: ubuntu-24.04 }
+          - { target: linux-armv8,                  os: ubuntu-24.04-arm }
+          - { target: macos-armv8,                  os: macos-15 }
+          - { target: cross-x86_64-mingw-w64,       os: ubuntu-24.04 }
+          - { target: cross-aarch64-mingw-llvm-w64, os: ubuntu-24.04 }
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb # v4.4.2
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Conan
+        run: python -m pip install "conan==${CONAN_VERSION}"
+
+      # The profiles set compiler.cstd=23, which Conan only accepts from
+      # GCC 14; Ubuntu 24.04 defaults to GCC 13.
+      - name: Install GCC 14
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-14
+          echo "CC=gcc-14" >> "$GITHUB_ENV"
+          echo "CXX=g++-14" >> "$GITHUB_ENV"
+
+      - name: Install MinGW-w64
+        if: matrix.target == 'cross-x86_64-mingw-w64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-mingw-w64-x86-64
+          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+
+      - name: Install llvm-mingw
+        if: matrix.target == 'cross-aarch64-mingw-llvm-w64'
+        run: |
+          archive="$RUNNER_TEMP/$LLVM_MINGW_ASSET"
+          curl -fsSL -o "$archive" \
+            "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_TAG}/${LLVM_MINGW_ASSET}"
+          echo "${LLVM_MINGW_SHA256}  ${archive}" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/llvm-mingw"
+          tar -xJf "$archive" -C "$RUNNER_TEMP/llvm-mingw" --strip-components=1
+          echo "$RUNNER_TEMP/llvm-mingw/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/conan2/p
+          key: conan-${{ matrix.target }}-${{ hashFiles('conanfile.py', 'profiles/**') }}
+          restore-keys: conan-${{ matrix.target }}-
+
+      - name: Detect the default Conan profile
+        env:
+          CONAN_HOME: ${{ runner.temp }}/conan2
+        run: conan profile detect --force
+
+      - name: Verify
+        env:
+          CONAN_HOME: ${{ runner.temp }}/conan2
+        run: ./scripts/verify.sh run ${{ matrix.target }}
+
+  windows:
+    name: windows-ucrt64
+    runs-on: windows-2022
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: msys2 {0}
+    # Visual Studio is installed on this runner and Conan prefers MSVC on
+    # Windows, setting CC/CXX overrides this.
+    env:
+      CC: gcc
+      CXX: g++
+
+    steps:
+      # Checking-out  with CRLF enabled breaks all shell scripts under bash.
+      - name: Keep LF line endings
+        shell: pwsh
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
+        with:
+          msystem: UCRT64
+          update: true
+          install: git
+          pacboy: >-
+            toolchain:p
+            cmake:p
+            ninja:p
+            python-pip:p
+            pkgconf:p
+
+      - name: Install Conan
+        run: python -m pip install --break-system-packages "conan==${CONAN_VERSION}"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/conan2/p
+          key: conan-windows-ucrt64-${{ hashFiles('conanfile.py', 'profiles/**') }}
+          restore-keys: conan-windows-ucrt64-
+
+      - name: Detect the default Conan profile
+        env:
+          CONAN_HOME: ${{ runner.temp }}/conan2
+        run: conan profile detect --force
+
+      - name: Verify
+        env:
+          CONAN_HOME: ${{ runner.temp }}/conan2
+        run: ./scripts/verify.sh run windows-ucrt64
