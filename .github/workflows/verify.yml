@@ -3,8 +3,27 @@ name: verify
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE*'
+      - '**.png'
+      - '**.jpg'
+      - '**.svg'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/dependabot.yml'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE*'
+      - '**.png'
+      - '**.jpg'
+      - '**.svg'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/dependabot.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
