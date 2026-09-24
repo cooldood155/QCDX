@@ -163,6 +163,7 @@ a shell variable, so it can also be given as an environment variable.
 | `PK_TEST_FOLDER` | empty | Test package folder override. |
 | `PK_TEST_SOURCE` | empty | Exported to the test recipe, which forwards it to CMake. |
 | `PK_CONAN` | `conan` | The Conan executable, for pinned or wrapped installations. |
+| `PK_TEST_BUILD_DIR` | `$PK_REPO_ROOT/build/test_package` | Where `create` builds the test package. Inside `build/` so the verify cleanup removes it. |
 
 A typical project config:
 

@@ -47,6 +47,7 @@ fi
 : "${PK_TEST_FOLDER:=}"
 : "${PK_TEST_SOURCE:=}"
 : "${PK_CONAN:=conan}"
+: "${PK_TEST_BUILD_DIR:=${PK_REPO_ROOT}/build/test_package}"
 
 if [[ -t 1 ]]; then
   PK_BOLD=$'\033[1m'; PK_RED=$'\033[31m'; PK_GREEN=$'\033[32m'
@@ -57,6 +58,15 @@ fi
 
 pk_die() { printf '%serror%s  %s\n' "$PK_RED" "$PK_RESET" "$1" >&2; exit 1; }
 pk_note() { printf '%s--%s %s\n' "$PK_BOLD" "$PK_RESET" "$1"; }
+
+# Conan is a native Windows program under MSYS2
+pk_native_path() {
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -m "$1"
+  else
+    printf '%s\n' "$1"
+  fi
+}
 
 pk_run() {
   printf '%s+%s %s\n' "$PK_YELLOW" "$PK_RESET" "$*"
@@ -242,10 +252,12 @@ case "$COMMAND" in
 
   create)
     mapfile -t test_args < <(pk_test_folder_args)
+    test_build_conf="tools.cmake.cmake_layout:test_folder=$(pk_native_path "$PK_TEST_BUILD_DIR")"
     for build_type in $PK_BUILD_TYPES; do
       pk_note "create $(pk_reference) ${build_type}"
       pk_run "$PK_CONAN" create "$PK_REPO_ROOT" "${PROFILE_ARGS[@]}" \
         -s build_type="$build_type" --build=missing \
+        -c "$test_build_conf" \
         "${VERSION_ARGS[@]}" "${test_args[@]}" "${EXTRA[@]}" || status=1
     done
     ;;
