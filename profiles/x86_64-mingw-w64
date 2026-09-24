@@ -11,12 +11,19 @@
 # Change build_folder_vars here and it breaks the matching preset's
 # toolchainFile, which points at:
 # build/windows-x86_64-release/generators/conan_toolchain.cmake.
+#
+# No compiler.cstd: Ubuntu 24.04's MinGW-w64 GCC is 13 and Conan only
+# accepts cstd=23 from GCC 14. The project still builds as C23 because
+# pk_project_setup(C_STANDARD 23) is ran whenever Conan doesn't set a C
+# standard.
+
+{% set compiler, version, compiler_exe = detect_api.detect_gcc_compiler("x86_64-w64-mingw32-gcc") %}
 
 [settings]
 os=Windows
 arch=x86_64
 compiler=gcc
-compiler.version=16
+compiler.version={{ detect_api.default_compiler_version(compiler, version) }}
 compiler.cppstd=23
 compiler.libcxx=libstdc++11
 build_type=Release
