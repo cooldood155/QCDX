@@ -83,3 +83,33 @@ function(pk_resolve_files OUT_VAR LABEL PATTERN)
   list(REMOVE_DUPLICATES resolved)
   set(${OUT_VAR} "${resolved}" PARENT_SCOPE)
 endfunction()
+
+function(pk_resolve_language OUT_VAR LABEL REQUESTED)
+  set(has_c FALSE)
+  set(has_cxx FALSE)
+  foreach(path IN LISTS ARGN)
+    if(path MATCHES "\\.(cc|cpp|cxx)$")
+      set(has_cxx TRUE)
+    elseif(path MATCHES "\\.c$")
+      set(has_c TRUE)
+    endif()
+  endforeach()
+
+  if(REQUESTED)
+    if(NOT REQUESTED MATCHES "^(C|CXX)$")
+      message(FATAL_ERROR
+        "pk_resolve_language (func): ${LABEL} 'LANGUAGE' must be C or CXX, "
+        "not '${REQUESTED}'.")
+    endif()
+    if(REQUESTED STREQUAL "C" AND has_cxx)
+      message(FATAL_ERROR
+        "pk_resolve_language (func): ${LABEL} is 'LANGUAGE' C but has C++ "
+        "sources.")
+    endif()
+    set(${OUT_VAR} "${REQUESTED}" PARENT_SCOPE)
+  elseif(has_c AND NOT has_cxx)
+    set(${OUT_VAR} "C" PARENT_SCOPE)
+  else()
+    set(${OUT_VAR} "CXX" PARENT_SCOPE)
+  endif()
+endfunction()

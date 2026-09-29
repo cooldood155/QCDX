@@ -69,7 +69,7 @@ function(pk_add_library_targets NAME)
 endfunction()
 
 function(pk_configure_libraries)
-  set(one_value_args BASE_NAME)
+  set(one_value_args BASE_NAME LANGUAGE EXPORT_HEADER)
   set(multi_value_args
     PUBLIC_HEADERS
     PRIVATE_HEADERS
@@ -86,6 +86,10 @@ function(pk_configure_libraries)
   if(NOT ARG_TARGETS)
     message(FATAL_ERROR
       "pk_configure_libraries (func): no 'TARGETS' given.")
+  endif()
+
+  if(NOT ARG_LANGUAGE)
+    set(ARG_LANGUAGE "CXX")
   endif()
 
   set(BASE_NAME "${ARG_BASE_NAME}")
@@ -137,17 +141,22 @@ function(pk_configure_libraries)
           FILES       ${ARG_PRIVATE_HEADERS})
     endif()
 
-    if(EXISTS "${PROJECT_BINARY_DIR}/generated/${BASE_NAME}/export.hpp")
+    if(ARG_EXPORT_HEADER)
       target_sources(${target}
         ${pub}
           FILE_SET    ${BASE_NAME}_generated_headers
           TYPE        HEADERS
           BASE_DIRS   "${PROJECT_BINARY_DIR}/generated"
-          FILES       "${PROJECT_BINARY_DIR}/generated/${BASE_NAME}/export.hpp")
+          FILES       "${ARG_EXPORT_HEADER}")
     endif()
 
-    target_compile_features(${target} ${pub}
-      cxx_std_${${prefix}_CXX_STANDARD})
+    if(ARG_LANGUAGE STREQUAL "C")
+      target_compile_features(${target} ${pub}
+        c_std_${${prefix}_C_STANDARD})
+    else()
+      target_compile_features(${target} ${pub}
+        cxx_std_${${prefix}_CXX_STANDARD})
+    endif()
 
     if(NOT target_type STREQUAL "INTERFACE_LIBRARY")
       target_compile_definitions(${target} PRIVATE
@@ -158,6 +167,7 @@ function(pk_configure_libraries)
       set_target_properties(${target} PROPERTIES
         VERSION "${PROJECT_VERSION}"
         SOVERSION "${PROJECT_VERSION_MAJOR}"
+        C_VISIBILITY_PRESET hidden
         CXX_VISIBILITY_PRESET hidden
         VISIBILITY_INLINES_HIDDEN ON)
 
@@ -189,6 +199,7 @@ function(pk_create_library)
   set(one_value_args
     NAME
     KIND
+    LANGUAGE
     SOURCE_DIR
     INCLUDE_DIR
     EXPORT_SET)
@@ -397,6 +408,12 @@ function(pk_create_library)
       "were provided.")
   endif()
 
+  pk_resolve_language(language "library '${ARG_NAME}'" "${ARG_LANGUAGE}"
+    ${ARG_SOURCES})
+  if(NOT ARG_LANGUAGE)
+    message(STATUS "${PROJECT_NAME}: library '${ARG_NAME}' language ${language}")
+  endif()
+
   if(ARG_KIND STREQUAL "AUTO")
     if(ARG_SOURCES)
       set(ARG_KIND "COMPILED")
@@ -455,10 +472,17 @@ function(pk_create_library)
       "'${target_list_var}' was not set (internal logic issue).")
   endif()
 
+  set(export_header "")
   if(${export_target_var})
+    if(language STREQUAL "C")
+      set(export_header "${PROJECT_BINARY_DIR}/generated/${ARG_NAME}/export.h")
+    else()
+      set(export_header "${PROJECT_BINARY_DIR}/generated/${ARG_NAME}/export.hpp")
+    endif()
+
     generate_export_header(${${export_target_var}}
       BASE_NAME        "${ARG_NAME}"
-      EXPORT_FILE_NAME "${PROJECT_BINARY_DIR}/generated/${ARG_NAME}/export.hpp")
+      EXPORT_FILE_NAME "${export_header}")
   endif()
 
   if(ARG_NO_DEFAULT_LINKS)
@@ -470,6 +494,8 @@ function(pk_create_library)
   pk_configure_libraries(
     TARGETS ${${target_list_var}}
     BASE_NAME "${ARG_NAME}"
+    LANGUAGE "${language}"
+    EXPORT_HEADER "${export_header}"
     PUBLIC_HEADERS ${ARG_PUBLIC_HEADERS}
     PRIVATE_HEADERS ${ARG_PRIVATE_HEADERS})
 

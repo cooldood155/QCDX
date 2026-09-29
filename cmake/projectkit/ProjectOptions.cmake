@@ -40,8 +40,11 @@ macro(pk_add_options_target)
   add_library(${PROJECT_NAME}::options ALIAS ${_pk_target})
   set_target_properties(${_pk_target} PROPERTIES EXPORT_NAME options)
 
-  set(_pk_gnu_like "$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang,IntelLLVM>")
-  set(_pk_msvc "$<COMPILE_LANG_AND_ID:CXX,MSVC>")
+  set(_pk_gnu_ids "GNU,Clang,AppleClang,IntelLLVM")
+  set(_pk_gnu_like
+    "$<OR:$<COMPILE_LANG_AND_ID:C,${_pk_gnu_ids}>,$<COMPILE_LANG_AND_ID:CXX,${_pk_gnu_ids}>>")
+  set(_pk_msvc
+    "$<OR:$<COMPILE_LANG_AND_ID:C,MSVC>,$<COMPILE_LANG_AND_ID:CXX,MSVC>>")
 
   if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU")
     set(${PK_PREFIX}_COMPILER_LIKE_GNU ON CACHE INTERNAL "")
@@ -123,13 +126,13 @@ macro(pk_add_options_target)
     endif()
 
     if(${PK_PREFIX}_COMPILER_IS_MSVC)
-      foreach(_pk_config RELEASE RELWITHDEBINFO MINSIZEREL)
-        string(REPLACE "/O2" "/O2 /Oy-"
-          CMAKE_CXX_FLAGS_${_pk_config} "${CMAKE_CXX_FLAGS_${_pk_config}}")
-        string(REPLACE "/O1" "/O1 /Oy-"
-          CMAKE_CXX_FLAGS_${_pk_config} "${CMAKE_CXX_FLAGS_${_pk_config}}")
-        string(REPLACE "/Oy- /Oy-" "/Oy-"
-          CMAKE_CXX_FLAGS_${_pk_config} "${CMAKE_CXX_FLAGS_${_pk_config}}")
+      foreach(_pk_lang IN ITEMS C CXX)
+        foreach(_pk_config RELEASE RELWITHDEBINFO MINSIZEREL)
+          set(_pk_flags_var CMAKE_${_pk_lang}_FLAGS_${_pk_config})
+          string(REPLACE "/O2" "/O2 /Oy-" ${_pk_flags_var} "${${_pk_flags_var}}")
+          string(REPLACE "/O1" "/O1 /Oy-" ${_pk_flags_var} "${${_pk_flags_var}}")
+          string(REPLACE "/Oy- /Oy-" "/Oy-" ${_pk_flags_var} "${${_pk_flags_var}}")
+        endforeach()
       endforeach()
     endif()
 
@@ -144,7 +147,7 @@ macro(pk_add_options_target)
       pk_try_compile_option(${_pk_target} "${_pk_compiler}" -ftrivial-auto-var-init=zero)
 
       target_compile_definitions(${_pk_target} INTERFACE
-        "$<${_pk_gnu_like}:_GLIBCXX_ASSERTIONS>")
+        "$<$<COMPILE_LANG_AND_ID:CXX,${_pk_gnu_ids}>:_GLIBCXX_ASSERTIONS>")
 
       pk_try_link_option(${_pk_target} "${_pk_compiler}" LINKER:-z,relro)
       pk_try_link_option(${_pk_target} "${_pk_compiler}" LINKER:-z,now)
@@ -163,7 +166,7 @@ macro(pk_add_options_target)
       target_compile_definitions(${_pk_target} INTERFACE
         "$<$<AND:${_pk_gnu_like},$<NOT:$<CONFIG:Debug>>>:_FORTIFY_SOURCE=3>")
       target_compile_definitions(${_pk_target} INTERFACE
-        "$<$<AND:${_pk_msvc},$<NOT:$<CONFIG:Debug>>>:_SECURE_SCL=1>")
+        "$<$<AND:$<COMPILE_LANG_AND_ID:CXX,MSVC>,$<NOT:$<CONFIG:Debug>>>:_SECURE_SCL=1>")
     endif()
 
     message(STATUS "${PROJECT_NAME}: hardening enabled")
@@ -218,11 +221,16 @@ macro(pk_add_options_target)
     endif()
   endif()
 
-  if(${PK_PREFIX}_CCACHE AND NOT CMAKE_CXX_COMPILER_LAUNCHER)
+  if(${PK_PREFIX}_CCACHE)
     find_program(${PK_PREFIX}_COMPILER_CACHE NAMES ccache sccache)
 
     if(${PK_PREFIX}_COMPILER_CACHE)
-      set(CMAKE_CXX_COMPILER_LAUNCHER "${${PK_PREFIX}_COMPILER_CACHE}")
+      foreach(_pk_lang IN ITEMS C CXX)
+        if(NOT CMAKE_${_pk_lang}_COMPILER_LAUNCHER)
+          set(CMAKE_${_pk_lang}_COMPILER_LAUNCHER
+            "${${PK_PREFIX}_COMPILER_CACHE}")
+        endif()
+      endforeach()
       message(STATUS
         "${PROJECT_NAME}: compiler cache ${${PK_PREFIX}_COMPILER_CACHE}")
     endif()

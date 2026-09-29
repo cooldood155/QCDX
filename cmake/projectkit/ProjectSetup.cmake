@@ -126,7 +126,7 @@ macro(pk_project_setup)
   set_property(CACHE ${PK_PREFIX}_CXX_STANDARD PROPERTY STRINGS 17 20 23 26)
   set(${PK_PREFIX}_C_STANDARD "${_PK_C_STANDARD}" CACHE STRING
     "C standard the project requires")
-  set_property(CACHE ${PK_PREFIX}_C_STANDARD PROPERTY STRINGS 17 20 23 26)
+  set_property(CACHE ${PK_PREFIX}_C_STANDARD PROPERTY STRINGS 99 11 17 23)
 
   if(CMAKE_CXX_STANDARD)
     set(${PK_PREFIX}_CXX_STANDARD ${CMAKE_CXX_STANDARD})
@@ -144,9 +144,9 @@ macro(pk_project_setup)
       "${PK_PREFIX}_CXX_STANDARD must be 17, 20, 23 or 26, not "
       "'${${PK_PREFIX}_CXX_STANDARD}'")
   endif()
-  if(NOT ${PK_PREFIX}_C_STANDARD MATCHES "^(17|20|23|26)$")
+  if(NOT ${PK_PREFIX}_C_STANDARD MATCHES "^(99|11|17|23)$")
     message(FATAL_ERROR
-      "${PK_PREFIX}_C_STANDARD must be 17, 20, 23 or 26, not "
+      "${PK_PREFIX}_C_STANDARD must be 99, 11, 17 or 23, not "
       "'${${PK_PREFIX}_C_STANDARD}'")
   endif()
 

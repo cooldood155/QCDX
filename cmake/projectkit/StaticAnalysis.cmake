@@ -145,11 +145,13 @@ function(pk_enable_static_analysis target)
 
   if(clang_tidy_command)
     set_target_properties(${target} PROPERTIES
+      C_CLANG_TIDY "${clang_tidy_command}"
       CXX_CLANG_TIDY "${clang_tidy_command}")
   endif()
 
   if(cppcheck_command)
     set_target_properties(${target} PROPERTIES
+      C_CPPCHECK "${cppcheck_command}"
       CXX_CPPCHECK "${cppcheck_command}")
   endif()
 endfunction()

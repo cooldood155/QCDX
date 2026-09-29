@@ -20,7 +20,7 @@ Checks: >
   -readability-magic-numbers
 
 WarningsAsErrors: ''
-HeaderFilterRegex: '(^|/)(include|src)/.*\.hpp$'
+HeaderFilterRegex: '(^|/)(include|src)/.*\.(h|hpp)$'
 FormatStyle: none
 
 ...

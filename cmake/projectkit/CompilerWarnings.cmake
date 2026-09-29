@@ -8,13 +8,13 @@ function(pk_add_warnings_target)
   add_library(${PROJECT_NAME}::warnings ALIAS ${target})
   set_target_properties(${target} PROPERTIES EXPORT_NAME warnings)
 
-  set(gnu_like
+  set(gnu_ids "GNU,Clang,AppleClang,IntelLLVM")
+
+  set(gnu_common
     -Wall
     -Wextra
     -Wpedantic
     -Wshadow
-    -Wnon-virtual-dtor
-    -Wold-style-cast
     -Wcast-align
     -Wsign-conversion
     -Wnull-dereference
@@ -22,19 +22,33 @@ function(pk_add_warnings_target)
     -Wformat=2
     -Wimplicit-fallthrough)
 
-  set(msvc_like
+  set(gnu_c ${gnu_common}
+    -Wstrict-prototypes
+    -Wmissing-prototypes)
+
+  set(gnu_cxx ${gnu_common}
+    -Wnon-virtual-dtor
+    -Wold-style-cast)
+
+  set(msvc_c
     /W4
-    /permissive-
-    /w14640
     /w14826)
 
+  set(msvc_cxx ${msvc_c}
+    /permissive-
+    /w14640)
+
   target_compile_options(${target} INTERFACE
-    "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang,IntelLLVM>:${gnu_like}>"
-    "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:${msvc_like}>")
+    "$<$<COMPILE_LANG_AND_ID:C,${gnu_ids}>:${gnu_c}>"
+    "$<$<COMPILE_LANG_AND_ID:CXX,${gnu_ids}>:${gnu_cxx}>"
+    "$<$<COMPILE_LANG_AND_ID:C,MSVC>:${msvc_c}>"
+    "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:${msvc_cxx}>")
 
   if(${prefix}_WERROR)
     target_compile_options(${target} INTERFACE
-      "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang,IntelLLVM>:-Werror>"
+      "$<$<COMPILE_LANG_AND_ID:C,${gnu_ids}>:-Werror>"
+      "$<$<COMPILE_LANG_AND_ID:CXX,${gnu_ids}>:-Werror>"
+      "$<$<COMPILE_LANG_AND_ID:C,MSVC>:/WX>"
       "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/WX>")
   endif()
 endfunction()
