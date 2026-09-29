@@ -73,11 +73,15 @@ function(pk_configure_libraries)
   set(multi_value_args
     PUBLIC_HEADERS
     PRIVATE_HEADERS
+    SOURCE_LANGUAGES
     TARGETS)
   cmake_parse_arguments(ARG
     "" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
   pk_project_prefix(prefix)
+
+  set(std_C "c_std_${${prefix}_C_STANDARD}")
+  set(std_CXX "cxx_std_${${prefix}_CXX_STANDARD}")
 
   if(NOT ARG_BASE_NAME)
     message(FATAL_ERROR
@@ -150,12 +154,14 @@ function(pk_configure_libraries)
           FILES       "${ARG_EXPORT_HEADER}")
     endif()
 
-    if(ARG_LANGUAGE STREQUAL "C")
-      target_compile_features(${target} ${pub}
-        c_std_${${prefix}_C_STANDARD})
-    else()
-      target_compile_features(${target} ${pub}
-        cxx_std_${${prefix}_CXX_STANDARD})
+    target_compile_features(${target} ${pub} ${std_${ARG_LANGUAGE}})
+
+    if(NOT target_type STREQUAL "INTERFACE_LIBRARY")
+      foreach(source_language IN LISTS ARG_SOURCE_LANGUAGES)
+        if(NOT source_language STREQUAL ARG_LANGUAGE)
+          target_compile_features(${target} PRIVATE ${std_${source_language}})
+        endif()
+      endforeach()
     endif()
 
     if(NOT target_type STREQUAL "INTERFACE_LIBRARY")
@@ -408,10 +414,21 @@ function(pk_create_library)
       "were provided.")
   endif()
 
-  pk_resolve_language(language "library '${ARG_NAME}'" "${ARG_LANGUAGE}"
-    ${ARG_SOURCES})
+  pk_resolve_language(language source_languages "library '${ARG_NAME}'"
+    "${ARG_LANGUAGE}" ${ARG_SOURCES})
   if(NOT ARG_LANGUAGE)
     message(STATUS "${PROJECT_NAME}: library '${ARG_NAME}' language ${language}")
+  endif()
+
+  if(language STREQUAL "C")
+    foreach(header IN LISTS ARG_PUBLIC_HEADERS)
+      if(header MATCHES "\\.(hh|hpp|hxx)$")
+        message(FATAL_ERROR
+          "pk_create_library (func): '${ARG_NAME}' has a C interface "
+          "('LANGUAGE' C) but a C++ public header: '${header}'. Move it to "
+          "the source directory as a private header.")
+      endif()
+    endforeach()
   endif()
 
   if(ARG_KIND STREQUAL "AUTO")
@@ -495,6 +512,7 @@ function(pk_create_library)
     TARGETS ${${target_list_var}}
     BASE_NAME "${ARG_NAME}"
     LANGUAGE "${language}"
+    SOURCE_LANGUAGES ${source_languages}
     EXPORT_HEADER "${export_header}"
     PUBLIC_HEADERS ${ARG_PUBLIC_HEADERS}
     PRIVATE_HEADERS ${ARG_PRIVATE_HEADERS})

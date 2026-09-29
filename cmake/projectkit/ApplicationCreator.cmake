@@ -186,8 +186,14 @@ function(pk_create_app)
       "given via 'PRIVATE_HEADERS'.")
   endif()
 
-  pk_resolve_language(language "application '${ARG_NAME}'" "${ARG_LANGUAGE}"
-    ${ARG_SOURCES})
+  pk_resolve_language(language source_languages "application '${ARG_NAME}'"
+    "${ARG_LANGUAGE}" ${ARG_SOURCES})
+
+  set(app_languages ${language} ${source_languages})
+  list(REMOVE_DUPLICATES app_languages)
+
+  set(std_C "c_std_${${prefix}_C_STANDARD}")
+  set(std_CXX "cxx_std_${${prefix}_CXX_STANDARD}")
 
   foreach(target output IN ZIP_LISTS ARG_TARGET_NAME ARG_OUTPUT_NAME)
     add_executable(${target} ${ARG_SOURCES})
@@ -213,13 +219,9 @@ function(pk_create_app)
           FILES       ${ARG_PRIVATE_HEADERS})
     endif()
 
-    if(language STREQUAL "C")
-      target_compile_features(${target} PRIVATE
-        c_std_${${prefix}_C_STANDARD})
-    else()
-      target_compile_features(${target} PRIVATE
-        cxx_std_${${prefix}_CXX_STANDARD})
-    endif()
+    foreach(app_language IN LISTS app_languages)
+      target_compile_features(${target} PRIVATE ${std_${app_language}})
+    endforeach()
 
     target_compile_definitions(${target} PRIVATE
       ${prefix}_VERSION_STRING="${PROJECT_VERSION}")
