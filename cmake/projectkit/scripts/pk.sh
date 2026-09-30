@@ -7,6 +7,7 @@
 #   ./scripts/pk.sh test release          build with tests and run them
 #   ./scripts/pk.sh stage                 install into stage/ and check it
 #   ./scripts/pk.sh full-clean            remove everything the project made
+#   ./scripts/pk.sh sync                  update the kit from the QCDX template
 #   ./scripts/pk.sh help build            everything 'build' accepts
 #
 # Conan and CMake are still what does the work: every command pk runs is
@@ -75,6 +76,14 @@ fi
 : "${PK_NATIVE_PROFILE:=native}"
 : "${PK_FORMAT_EXCLUDE:=cmake/projectkit/ build/ stage/ _install/}"
 
+# Where 'pk sync' takes the kit from, and which paths it owns. A fork of the
+# template sets PK_UPSTREAM_URL in scripts/helpers/pk/pk.conf.
+: "${PK_UPSTREAM_URL:=https://github.com/cooldood155/QCDX.git}"
+: "${PK_UPSTREAM_BRANCH:=main}"
+: "${PK_SYNC_PATHS:=cmake/projectkit scripts/pk.sh scripts/verify.sh scripts/package.sh}"
+PK_SYNC_STATE="scripts/helpers/pk/upstream.conf"
+PK_UPSTREAM_REF="refs/projectkit/upstream"
+
 PK_PRESETS_SCRIPT="${SCRIPT_DIR}/helpers/pk/presets.cmake"
 PK_STAMP_NAME="pk-deps.stamp"
 
@@ -113,7 +122,8 @@ pk_show_command() {
   for arg in "$@"; do
     case "$arg" in
       "") printf " ''" ;;
-      *[!A-Za-z0-9_./:=,+@%-]*) printf ' %q' "$arg" ;;
+      *[!A-Za-z0-9_./:=,+@%\ -]*) printf ' %q' "$arg" ;;
+      *" "*) printf ' "%s"' "$arg" ;;
       *) printf ' %s' "$arg" ;;
     esac
   done
@@ -183,7 +193,7 @@ pk_repo_script() {
 # -----------------------------------------------------------------------------
 
 PK_COMMANDS="build run test configure deps install stage rebuild clean
-  full-clean analyze memcheck sanitize format status list doctor verify
+  full-clean analyze memcheck sanitize format status list doctor sync verify
   package rename help shell-init"
 
 pk_command_summary() {
@@ -205,6 +215,7 @@ pk_command_summary() {
     status)     echo "show build trees, their options and dependency state" ;;
     list)       echo "list build types, apps, cross targets and presets" ;;
     doctor)     echo "check tools and environment, --fix what can be fixed" ;;
+    sync)       echo "update the kit (cmake/projectkit) from the QCDX template" ;;
     verify)     echo "full verification matrix (runs scripts/verify.sh)" ;;
     package)    echo "Conan packaging: create, upload... (runs scripts/package.sh)" ;;
     rename)     echo "rename a project made from the template (scripts/bootstrap.sh)" ;;
@@ -226,6 +237,7 @@ pk_command_alias() {
     check) echo verify ;;
     bootstrap) echo rename ;;
     purge|distclean) echo full-clean ;;
+    upgrade) echo sync ;;
     *) return 1 ;;
   esac
 }
@@ -283,6 +295,7 @@ pk_command_flags() {
     full-clean) echo "cache yes dry" ;;
     format)    echo "check dry" ;;
     doctor)    echo "fix" ;;
+    sync)      echo "from branch base nocommit dry" ;;
     *)         echo "" ;;
   esac
 }
@@ -318,6 +331,10 @@ pk_flag_spelling() {
     consumer) echo "--no-consumer" ;;
     cache)    echo "--cache" ;;
     yes)      echo "-y, --yes" ;;
+    from)     echo "--from=URL|PATH" ;;
+    branch)   echo "--branch=NAME" ;;
+    base)     echo "--base=COMMIT" ;;
+    nocommit) echo "--no-commit" ;;
   esac
 }
 
@@ -352,6 +369,10 @@ pk_flag_meaning() {
     consumer) echo "skip building a consumer project against stage/" ;;
     cache)    echo "also remove this package from the local Conan cache" ;;
     yes)      echo "do not ask before deleting" ;;
+    from)     echo "template to sync from: a URL (remembered) or a local clone (this sync only)" ;;
+    branch)   echo "template branch, default ${PK_UPSTREAM_BRANCH} (remembered)" ;;
+    base)     echo "template commit the kit currently matches, if pk guesses wrong" ;;
+    nocommit) echo "stage the update for review instead of committing it" ;;
   esac
 }
 
@@ -367,6 +388,7 @@ pk_command_usage_line() {
     clean)     echo "clean [TYPE] [flag...]" ;;
     stage)     echo "stage [TYPE] [flag...]" ;;
     full-clean) echo "full-clean [--cache] [-y] [-n]" ;;
+    sync)      echo "sync [--from URL|PATH] [--branch NAME] [--base COMMIT] [--no-commit] [-n]" ;;
     format)    echo "format [--check] [path...]" ;;
     help)      echo "help [command]" ;;
     verify|package|rename)
@@ -396,6 +418,8 @@ pk_command_examples() {
       printf '  %s install release\n  %s install --prefix=/tmp/%s\n' "$self" "$self" "$PK_PROJECT" ;;
     clean)
       printf '  %s clean\n  %s clean release --deps\n' "$self" "$self" ;;
+    sync)
+      printf '  %s sync -n\n  %s sync\n  %s sync --from /path/to/QCDX\n' "$self" "$self" "$self" ;;
     full-clean)
       printf '  %s full-clean -n\n  %s full-clean\n  %s full-clean --cache --yes\n' \
         "$self" "$self" "$self" ;;
@@ -437,6 +461,16 @@ pk_command_notes() {
     clean)
       echo "Without flags only the selected build tree goes; Conan output is kept so the"
       echo "next build does not reinstall anything. For everything, use full-clean." ;;
+    sync)
+      echo "Brings the template's kit changes into this project: ${PK_SYNC_PATHS}."
+      echo "Only the template's changes since the last sync are applied, as a 3-way"
+      echo "merge, so changes you made to the kit here are kept; where both sides"
+      echo "changed the same lines you get conflict markers to resolve. The result is"
+      echo "one commit that touches only those paths plus ${PK_SYNC_STATE}, which"
+      echo "records the template URL, branch and commit for the next sync. The first"
+      echo "sync finds the template commit this kit matches by itself."
+      echo "Needs: no staged changes, no uncommitted changes in those paths. Your"
+      echo "other uncommitted work is left alone." ;;
     full-clean)
       echo "Removes every build tree and Conan output (build/), ${PK_STAGE_DIR}/, _install/,"
       echo "compile_commands.json, verify's scratch and consumer directories, the Conan"
@@ -607,6 +641,10 @@ FIX=0
 ASSUME_YES=0
 CLEAN_CACHE=0
 NO_CONSUMER=0
+SYNC_FROM=""
+SYNC_BRANCH=""
+SYNC_BASE=""
+NO_COMMIT=0
 TESTS=""
 CONFIG_DEFS=()
 TARGETS=()
@@ -755,6 +793,16 @@ pk_parse_args() {
       -y|--yes) pk_flag_allowed yes; ASSUME_YES=1 ;;
       --cache) pk_flag_allowed cache; CLEAN_CACHE=1 ;;
       --no-consumer) pk_flag_allowed consumer; NO_CONSUMER=1 ;;
+      --from|--from=*)
+        pk_flag_allowed from; pk_flag_value "$arg" "${2-}" "$has_next"
+        SYNC_FROM="$FLAG_VALUE" ;;
+      --branch|--branch=*)
+        pk_flag_allowed branch; pk_flag_value "$arg" "${2-}" "$has_next"
+        SYNC_BRANCH="$FLAG_VALUE" ;;
+      --base|--base=*)
+        pk_flag_allowed base; pk_flag_value "$arg" "${2-}" "$has_next"
+        SYNC_BASE="$FLAG_VALUE" ;;
+      --no-commit) pk_flag_allowed nocommit; NO_COMMIT=1 ;;
       --fix)   pk_flag_allowed fix; FIX=1 ;;
 
       -*) pk_usage_die "unknown flag '$arg'" ;;
@@ -1456,6 +1504,207 @@ cmd_stage() {
   [[ "$failed" -eq 0 ]]
 }
 
+# -----------------------------------------------------------------------------
+# sync: the template's kit changes, applied as a 3-way merge
+# -----------------------------------------------------------------------------
+
+pk_state_get() {
+  [[ -f "$PK_SYNC_STATE" ]] || return 1
+  sed -n "s/^$1=//p" "$PK_SYNC_STATE" | head -n 1
+}
+
+pk_state_write() {
+  mkdir -p "$(dirname "$PK_SYNC_STATE")"
+  {
+    printf '# Written by "pk sync": the template cmake/projectkit comes from and\n'
+    printf '# the template commit it was last synced to. Keep it committed.\n'
+    printf 'url=%s\n' "$1"
+    printf 'branch=%s\n' "$2"
+    printf 'commit=%s\n' "$3"
+  } > "$PK_SYNC_STATE"
+}
+
+# github.com/owner/repo for any https, ssh or scp-style spelling of a URL.
+pk_normalize_url() {
+  printf '%s\n' "$1" | sed -e 's|^[a-z+]*://||' -e 's|^[^@/]*@||' -e 's|:|/|' \
+    -e 's|\.git$||' -e 's|/*$||' | tr '[:upper:]' '[:lower:]'
+}
+
+# A local clone is only good on this machine, so --from with a path is used
+# for this sync but the committed file keeps a URL everyone can fetch.
+pk_sync_remembered_url() {
+  case "$1" in
+    *://*|*@*:*) printf '%s\n' "$1" ;;
+    *) printf '%s\n' "${2:-$PK_UPSTREAM_URL}" ;;
+  esac
+}
+
+# The template commit whose kit is closest to this project's committed kit.
+pk_sync_detect_base() {
+  local tip="$1" commit lines best="" best_lines=""
+  # shellcheck disable=SC2086
+  for commit in $(git rev-list --max-count=500 "$tip" -- $PK_SYNC_PATHS); do
+    # shellcheck disable=SC2086
+    lines="$(git diff --numstat "$commit" HEAD -- $PK_SYNC_PATHS \
+      | awk '{ if ($1 != "-") n += $1 + $2 } END { print n + 0 }')"
+    if [[ -z "$best_lines" || "$lines" -lt "$best_lines" ]]; then
+      best="$commit"
+      best_lines="$lines"
+    fi
+    [[ "$lines" -eq 0 ]] && break
+  done
+  [[ -n "$best" ]] || return 1
+  printf '%s %s\n' "$best" "$best_lines"
+}
+
+pk_sync_run() {
+  local patch="$1" url branch state_url name
+  git rev-parse --verify -q HEAD >/dev/null || pk_die "sync needs at least one commit in this repository"
+  git rev-parse --verify -q MERGE_HEAD >/dev/null && pk_die "finish the merge in progress first"
+  git diff --cached --quiet || pk_die "you have staged changes: commit or unstage them first, so the sync commit holds only the kit"
+
+  local dirty
+  # shellcheck disable=SC2086
+  dirty="$(git status --porcelain -- $PK_SYNC_PATHS "$PK_SYNC_STATE")"
+  if [[ -n "$dirty" ]]; then
+    printf '%s\n' "$dirty" | sed 's/^/  /' >&2
+    pk_die "uncommitted changes in synced paths (above): commit or stash them first"
+  fi
+
+  state_url="$(pk_state_get url || true)"
+  url="${SYNC_FROM:-${state_url:-$PK_UPSTREAM_URL}}"
+  branch="${SYNC_BRANCH:-$(pk_state_get branch || true)}"
+  branch="${branch:-$PK_UPSTREAM_BRANCH}"
+  name="$(basename "$(printf '%s' "$url" | sed -e 's|\.git$||' -e 's|/*$||')")"
+  [[ -n "$name" ]] || name="template"
+
+  local origin
+  origin="$(git remote get-url origin 2>/dev/null || true)"
+  if [[ -n "$origin" && "$(pk_normalize_url "$origin")" == "$(pk_normalize_url "$url")" ]]; then
+    pk_info "this repository is the template (${url}); there is nothing to sync from"
+    return 0
+  fi
+
+  pk_step "fetch ${url} (${branch})"
+  pk_show_command git fetch --no-tags --quiet "$url" "+refs/heads/${branch}:${PK_UPSTREAM_REF}"
+  git fetch --no-tags --quiet "$url" "+refs/heads/${branch}:${PK_UPSTREAM_REF}" \
+    || pk_die "could not fetch branch '${branch}' of ${url}"
+
+  local tip
+  tip="$(git rev-parse "${PK_UPSTREAM_REF}^{commit}")"
+  if git merge-base --is-ancestor HEAD "$tip" 2>/dev/null; then
+    pk_info "HEAD is already part of ${name}'s history: this is the template or an unchanged copy of it"
+    return 0
+  fi
+
+  local base="" state_commit found lines
+  state_commit="$(pk_state_get commit || true)"
+  if [[ -n "$SYNC_BASE" ]]; then
+    base="$(git rev-parse --verify -q "${SYNC_BASE}^{commit}")" \
+      || pk_die "--base ${SYNC_BASE} is not a commit in ${name}"
+    pk_info "base: ${SYNC_BASE} (--base)"
+  elif [[ -n "$state_commit" ]] && git merge-base --is-ancestor "$state_commit" "$tip" 2>/dev/null; then
+    base="$state_commit"
+    pk_info "base: $(git log -1 --format='%h %s' "$base") (last sync)"
+  else
+    [[ -n "$state_commit" ]] && pk_warn "last synced commit $(printf '%s' "$state_commit" | cut -c1-7) is not in ${url} ${branch} (not pushed yet, or history rewritten); searching instead"
+    pk_step "find the ${name} commit this kit matches"
+    found="$(pk_sync_detect_base "$tip")" || pk_die "no commit in ${name} touches: ${PK_SYNC_PATHS}"
+    base="${found%% *}"
+    lines="${found##* }"
+    pk_info "base: $(git log -1 --format='%h %s' "$base")"
+    if [[ "$lines" -gt 0 ]]; then
+      pk_info "${lines} lines of the kit here differ from it and are kept, in:"
+      # shellcheck disable=SC2086
+      git diff --name-only "$base" HEAD -- $PK_SYNC_PATHS | sed 's/^/    /'
+      pk_info "if that base is wrong, pass --base with the right ${name} commit"
+    fi
+  fi
+
+  local short
+  short="$(git rev-parse --short "$tip")"
+
+  # shellcheck disable=SC2086
+  if git diff --quiet "$base" "$tip" -- $PK_SYNC_PATHS; then
+    pk_info "kit is up to date with ${name} ${short}"
+    if [[ -n "$state_commit" ]] && ! git merge-base --is-ancestor "$state_commit" "$tip" 2>/dev/null; then
+      pk_info "${PK_SYNC_STATE} keeps $(printf '%s' "$state_commit" | cut -c1-7), which is newer than ${url} ${branch}"
+      return 0
+    fi
+    if [[ "$state_commit" != "$tip" || "$state_url" != "$(pk_sync_remembered_url "$url" "$state_url")" ]]; then
+      if [[ "$DRY_RUN" -eq 1 ]]; then
+        pk_info "dry run: would record ${name} ${short} in ${PK_SYNC_STATE}"
+        return 0
+      fi
+      pk_state_write "$(pk_sync_remembered_url "$url" "$state_url")" "$branch" "$tip"
+      git add "$PK_SYNC_STATE"
+      if [[ "$NO_COMMIT" -eq 0 ]]; then
+        pk_run git commit -q -m "Record projectkit upstream ${name} ${short}" \
+          || pk_die "commit failed; the change is staged, commit it yourself"
+        pk_info "recorded ${name} ${short} in ${PK_SYNC_STATE}"
+      else
+        pk_info "staged ${PK_SYNC_STATE}; commit it when ready"
+      fi
+    fi
+    return 0
+  fi
+
+  pk_step "${name} changes since $(git rev-parse --short "$base")"
+  # shellcheck disable=SC2086
+  git log --format='  %h %s' "${base}..${tip}" -- $PK_SYNC_PATHS
+  # shellcheck disable=SC2086
+  git diff --full-index --binary "$base" "$tip" -- $PK_SYNC_PATHS > "$patch"
+  git apply --stat "$patch" | sed 's/^/ /'
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    pk_info "dry run: nothing changed"
+    return 0
+  fi
+
+  pk_step "apply as a 3-way merge"
+  pk_info "git apply --3way with the changes listed above"
+  local applied=0
+  git apply --3way --whitespace=nowarn "$patch" || applied=1
+
+  pk_state_write "$(pk_sync_remembered_url "$url" "$state_url")" "$branch" "$tip"
+  git add "$PK_SYNC_STATE"
+
+  local message
+  message="Sync projectkit from ${name} ${short}"
+
+  local conflicts
+  conflicts="$(git diff --name-only --diff-filter=U)"
+  if [[ "$applied" -ne 0 || -n "$conflicts" ]]; then
+    printf '\n%sconflicts%s: both sides changed the same lines in:\n' "$PK_RED" "$PK_RESET"
+    printf '%s\n' "$conflicts" | sed 's/^/  /'
+    printf '\nfix the <<<<<<< ======= >>>>>>> blocks in those files, then:\n'
+    printf '  git add %s\n' "$(printf '%s' "$conflicts" | tr '\n' ' ')"
+    printf '  git commit -m "%s"\n' "$message"
+    printf 'or undo the whole sync (your other uncommitted work is kept): git reset --merge\n'
+    return 1
+  fi
+
+  if [[ "$NO_COMMIT" -eq 1 ]]; then
+    pk_info "staged: review with 'git diff --cached', then: git commit -m \"${message}\""
+    return 0
+  fi
+
+  pk_step "commit"
+  pk_run git commit -q -m "$message" -m "Upstream: ${url} ${branch} $(git rev-parse "$tip")" \
+    || pk_die "commit failed; the sync is staged, commit it yourself: git commit -m \"${message}\""
+  git show --stat --format='  %h %s' HEAD | sed 's/^/ /'
+}
+
+cmd_sync() {
+  pk_no_positionals
+  local patch status
+  patch="$(mktemp "${TMPDIR:-/tmp}/pk-sync.XXXXXX")" || pk_die "cannot create a temporary file"
+  pk_sync_run "$patch"
+  status=$?
+  rm -f "$patch"
+  return "$status"
+}
+
 cmd_format() {
   pk_require_tools clang-format
   local files
@@ -1755,7 +2004,7 @@ cmd_words() {
           printf '%s\n' $PK_COMMANDS ;;
         verify) printf '%s\n' list list-possible run run-possible clean help ;;
         package) printf '%s\n' reference install create build export export-pkg list info path editable remove upload cache-clean help ;;
-        format|status|doctor|list|shell-init|rename|full-clean) ;;
+        format|status|doctor|list|shell-init|rename|full-clean|sync) ;;
         *)
           printf '%s\n' debug release relwithdebinfo minsizerel
           [[ "$resolved" == "run" ]] && pk_app_names
@@ -1829,6 +2078,7 @@ main() {
     clean)     cmd_clean ;;
     full-clean) cmd_full_clean ;;
     stage)     cmd_stage ;;
+    sync)      cmd_sync ;;
     analyze)   cmd_analyze ;;
     memcheck)  cmd_memcheck ;;
     sanitize)  cmd_sanitize ;;
