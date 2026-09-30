@@ -15,17 +15,25 @@ prints every command before it runs it.
 
 ## Install as a shell command
 
-*Replacing the path* with your actual projects scripts path, or export them to
-an external location to have a univerally registered shell command, able to be
-used in any QCDX templated project.
-
 ```bash
 echo 'eval "$(/path/to/project/scripts/pk.sh shell-init)"' >> ~/.bashrc
 ```
 
 This defines a `pk` function that runs the nearest `scripts/pk.sh` above the
-current directory, `pk build` then works anywhere inside the project, with tab
-completion for commands, flags, build types and app names.
+**current directory**, `pk build` then works anywhere inside the project, with
+tab completion for commands, flags, build types and app names.
+
+If you want to define a `pk` function that works in any `QCDX` templated
+project, save the funtion to a file once, then nothing depends on where the
+script is located. Replace `$HOME` with any absolute prefix you wish:
+
+```bash
+grep -n '.pk.bash' ~/.bashrc
+/path/to/project_or_global/scripts/pk.sh shell-init > "$HOME/.pk.bash"
+printf '\n# ProjectKit pk command\n[ -f "$HOME/.pk.bash" ] && . "$HOME/.pk.bash"\n' >> "$HOME/.bashrc"
+source "$HOME/.bashrc"
+type pk
+```
 
 ## Commands
 
