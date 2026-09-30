@@ -10,6 +10,7 @@ prints every command before it runs it.
 ./scripts/pk.sh test release     # Release, tests on, then ctest
 ./scripts/pk.sh stage            # install into stage/, check it, write a report
 ./scripts/pk.sh full-clean       # remove everything the project generated
+./scripts/pk.sh sync             # pull kit updates from the QCDX template
 ./scripts/pk.sh help build       # every flag 'build' accepts
 ```
 
@@ -56,14 +57,15 @@ type pk
 | `status`    | build trees, their options, Conan output, compile_commands.json |
 | `list`      | build types, apps, cross targets and whether each is ready      |
 | `doctor`    | required and optional tools; `--fix` creates Conan's profile    |
+| `sync`      | update the kit from the QCDX template, as one commit            |
 | `verify`    | runs `scripts/verify.sh` with the given arguments               |
 | `package`   | runs `scripts/package.sh` with the given arguments              |
 | `rename`    | runs `scripts/bootstrap.sh` with the given arguments            |
 | `shell-init`| prints the `pk` function and completion for `~/.bashrc`         |
 
-Shortcuts: `b` build, `r` run, `t` test, `c` configure, `i` install,
+Shortcuts: `b` build, `r` run, `t` test, `c` configure, `i` install, `st`
 `st` status, `ls` list, `fmt` format, `purge` or `distclean` full-clean,
-plus any *unambiguous* prefix.
+`upgrade` sync, plus any *unambiguous* prefix.
 
 Build types are `debug` (`d`), `release` (`r`), `relwithdebinfo` (`rwd`) and
 `minsizerel` (`msr`), given as a bare word or with `-t`. The default is Debug.
@@ -149,7 +151,41 @@ without a terminal pk refuses to delete unless `-y` is given.
 
 The list is explicit on purpose. `git clean -X` would also delete ignored files
 the build does not own, like `.vscode/` or `docs/notes/`; those are printed
-afterwards as "left alone" so nothing is hidden, but never touched.
+afterwards as "left alone".
+
+## sync: kit updates from the template
+
+Every project made from QCDX carries its own copy of the kit. `pk sync` brings
+the template's later kit changes into it, from anywhere, with nothing but Git:
+
+```bash
+pk sync -n                       # what would change, nothing touched
+pk sync                          # fetch, merge, commit
+pk sync --from /k/Templates/QCDX # a local clone, including unpushed commits
+```
+
+1. The template's branch is fetched into `refs/projectkit/upstream`, a ref
+   that is never pushed and never checked out.
+2. The base is the template commit the kit was last synced to, read from
+   `scripts/helpers/pk/upstream.conf`. On the first sync pk finds it: the
+   template commit whose kit is closest to this project's, and it lists the
+   files that differ locally.
+3. Only the template's changes from that base to its newest commit, and only
+   in the synced paths (`cmake/projectkit`, `scripts/pk.sh`,
+   `scripts/verify.sh`, `scripts/package.sh`), are applied with
+   `git apply --3way`. Changes made to the kit in this project are kept.
+4. The result is committed as `Sync projectkit from QCDX <commit>`, together
+   with the updated `upstream.conf`. Your other uncommitted work is left
+   alone and is not part of the commit.
+
+If both sides changed the same lines, the files get conflict markers; resolve
+them, `git add` the files and commit with the printed message, or undo the
+whole sync with `git reset --merge`.
+
+A sync refuses to start with staged changes, or with uncommitted changes in
+the synced paths. In the template repository itself it does nothing. A URL
+given with `--from` is remembered for everyone; a local path is used for that
+one sync only, so the committed file never points at one person's disk.
 
 ## Flags
 
@@ -175,6 +211,10 @@ afterwards as "left alone" so nothing is hidden, but never touched.
 | `--no-consumer`                     | `stage` without the consumer project            |
 | `--cache`                           | `full-clean` also empties the Conan cache entry |
 | `-y`, `--yes`                       | delete without asking                           |
+| `--from=URL\|PATH`                  | `sync` from another template URL or local clone |
+| `--branch=NAME`                     | `sync` from another template branch             |
+| `--base=COMMIT`                     | `sync` from this template commit, not the guess |
+| `--no-commit`                       | `sync` stages the update instead of committing  |
 | `-n`, `--dry-run`                   | print commands only                             |
 | `-v`, `--verbose`                   | full compiler command lines                     |
 
@@ -191,7 +231,12 @@ PK_DEFAULT_JOBS=8                        # default -j
 PK_STAGE_DIR=stage                       # install's default prefix
 PK_NATIVE_PROFILE=native                 # profiles/<name> for native builds
 PK_FORMAT_EXCLUDE="cmake/projectkit/ build/ stage/ _install/"
+PK_UPSTREAM_URL=https://github.com/cooldood155/QCDX.git # sync's template
+PK_UPSTREAM_BRANCH=main
+PK_SYNC_PATHS="cmake/projectkit scripts/pk.sh scripts/verify.sh scripts/package.sh"
 ```
+
+A fork of the template should set `PK_UPSTREAM_URL` to its own repository.
 
 `NO_COLOR=1` turns colors off.
 
