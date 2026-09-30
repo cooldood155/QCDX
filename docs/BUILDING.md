@@ -104,8 +104,63 @@ referred to as a **triple**
 
 ## Actually Building
 
-**TODO:** document Conan install and CMake preset *commands* for native and
-cross builds.
+Every build is two steps: Conan installs the dependencies and writes a CMake
+toolchain file, then a CMake preset configures against that toolchain. `pk`
+runs both, only when needed; the manual commands below are what it runs.
+
+### Native builds
+
+```bash
+./scripts/pk.sh build release
+./scripts/pk.sh test release
+```
+
+By hand, where `<Type>` is `Debug`, `Release`, `RelWithDebInfo` or
+`MinSizeRel` and the preset uses its lowercase form:
+
+```bash
+./scripts/package.sh install --build_type=Release
+cmake --preset native-release
+cmake --build build/native-release
+ctest --test-dir build/native-release --output-on-failure
+```
+
+`package.sh install` runs `conan install` with `profiles/native` and writes
+the toolchain to `build/Release/generators/`, which the `native-*` presets
+read. By hand the tests are built by default, because `profiles/native` keeps
+them on; `pk` leaves them off until `pk test` or `--tests` asks for them.
+
+### Cross builds
+
+Each cross target is a Conan profile in `profiles/` with matching
+`<triple>-<type>` presets. `pk list` shows the targets and whether their
+toolchain is installed:
+
+```bash
+./scripts/pk.sh list
+./scripts/pk.sh build release -x x86_64-mingw-w64
+```
+
+By hand, the code generation tools are built natively first, in the same build
+type, then the cross build uses them:
+
+```bash
+./scripts/package.sh install --build_type=Release
+cmake --preset host-tools -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_TOOLCHAIN_FILE="$PWD/build/Release/generators/conan_toolchain.cmake"
+cmake --build build/host-tools
+
+./scripts/package.sh install --build_type=Release \
+  --profile=native --host-profile=x86_64-mingw-w64
+cmake --preset x86_64-mingw-w64-release
+cmake --build build/x86_64-mingw-w64-release
+```
+
+Cross dependencies land in `build/<os>-<arch>-<type>/` instead of
+`build/<Type>/`, and the cross presets point at that directory. The cross
+profiles turn the tests off (`tools.build:skip_test=True`); built anyway with
+`--tests`, they are registered with ctest but disabled, since they cannot run
+on this machine.
 
 ## Toolchain Internals
 

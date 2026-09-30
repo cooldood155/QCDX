@@ -8,9 +8,10 @@ from somewhere else.
 template: https://github.com/cooldood155/QCDX
 ```
 
-The template carries ProjectKit under `cmake/projectkit/`, the two driver
-scripts, CMake presets, Conan profiles, and a tiny working library, app, test
-and tool so that a fresh clone builds before you have written a line of code.
+The template carries ProjectKit under `cmake/projectkit/`, the driver scripts
+(`pk.sh`, `verify.sh`, `package.sh`, `bootstrap.sh`), CMake presets, Conan
+profiles, and a tiny working library, app, test and tool so that a fresh clone
+builds before you have written a line of code.
 Where this guide uses `qcdx` as the template's own project name, substitute
 whatever the template actually uses if it differs.
 
@@ -96,6 +97,8 @@ git add -A && git commit -m "start from QCDX template"
 git diff --stat
 ```
 
+`./scripts/pk.sh rename` runs the same script with the same arguments.
+
 The script renames directories, file names and file contents, and refuses to
 run on a dirty tree so that `git diff` is a usable review. Add `--dry-run`
 first if you want to see the plan. The kit under `cmake/projectkit` is never
@@ -105,6 +108,21 @@ Then check `conanfile.py` for `url` and `package_info`, and rewrite
 `README.md`, which still describes the template.
 
 ## 4. First build
+
+```bash
+./scripts/pk.sh doctor
+./scripts/pk.sh build
+./scripts/pk.sh test
+```
+
+`doctor` checks the required and optional tools and the Conan profile.
+`build` installs the Conan dependencies, configures and builds, each only when
+needed, and prints every command before running it. `test` turns the tests on
+in the tree, installs Catch2 if the last dependency install skipped it, builds
+and runs ctest. To type `pk` instead of `./scripts/pk.sh`, install the shell
+function described in `PK_SH.md`.
+
+`pk` decides which of these steps are needed; they can always be run by hand:
 
 ```bash
 ./scripts/package.sh install --build_type=Debug
@@ -216,6 +234,14 @@ files, CPack, and host tools. Full detail in `VERIFY_SH.md`.
 Use `--keep` while debugging so the reset stage does not delete the build tree
 you are inspecting.
 
+For a quicker check of only the tree you are working in, `stage` runs the
+install and consumer stages against it and writes every result to
+`stage/pk-stage.txt`:
+
+```bash
+./scripts/pk.sh stage
+```
+
 ## 7. Package
 
 ```bash
@@ -279,37 +305,63 @@ that layout work.
 ## 10. Static analysis
 
 ```bash
+./scripts/pk.sh analyze
+./scripts/pk.sh analyze -O SA_OUTPUT=files
+```
+
+`analyze` builds in its own tree, `build/native-debug-analyze`, so the normal
+tree keeps compiling at full speed; reports land under
+`build/native-debug-analyze/analysis/`. By hand, in the normal tree:
+
+```bash
 cmake --preset native-debug -DMYPROJECT_SA_ALL=ON
 cmake --preset native-debug -DMYPROJECT_SA_ALL=ON -DMYPROJECT_SA_OUTPUT=files
 ```
 
-Reports land under `build/native-debug/analysis/`. Full detail in
+Reports then land under `build/native-debug/analysis/`. Full detail in
 `ANALYSER_LAUNCHER_SH.md`.
 
 ## 11. Updating ProjectKit later
 
-The kit is self-contained, so updating is replacing one directory. Pick one
-mechanism per project and stay with it:
+The kit is vendored: every project keeps its own copy under
+`cmake/projectkit/`. `sync` brings the template's later changes into it:
 
 ```bash
-# vendored copy, the template's default
-rm -rf cmake/projectkit
-git clone --depth 1 https://github.com/cooldood155/QCDX.git /tmp/qcdx
-cp -r /tmp/qcdx/cmake/projectkit cmake/projectkit
-git add -A && git commit -m "update projectkit"
+./scripts/pk.sh sync -n
+./scripts/pk.sh sync
 ```
 
+The template is fetched from GitHub, and only its changes since the last sync
+are applied, as a 3-way merge, to `cmake/projectkit` and the `pk.sh`,
+`verify.sh` and `package.sh` wrappers. Changes you made to the kit in this
+project are kept; where both sides changed the same lines you get conflict
+markers to resolve, and `git reset --merge` undoes the whole sync. The result
+is one commit, together with `scripts/helpers/pk/upstream.conf`, which records
+the template commit for the next sync.
+
+Run it once right after creating the project, even with nothing to update:
+that first sync records which template commit the kit came from, so every later
+sync starts from the exact base instead of a search.
+
+Do not update by deleting `cmake/projectkit` and copying the template's over
+it: that silently throws away every change made to the kit in this project.
+
+A fork of the template sets `PK_UPSTREAM_URL` in `scripts/helpers/pk/pk.conf`.
+Full detail in `PK_SH.md`.
+
+If you would rather pin the kit as a git submodule, `pk sync` does not apply;
+updates are then `git submodule update --remote`:
+
 ```bash
-# submodule, when you want a recorded version
 git rm -r cmake/projectkit
 git submodule add https://github.com/cooldood155/QCDX.git extern/qcdx
 # then point the module path at extern/qcdx/cmake/projectkit in CMakeLists.txt
 # and the script wrappers at extern/qcdx/cmake/projectkit/scripts
 ```
 
-Whatever you choose, the only project-side references to the kit are the
+Either way, the only project-side references to the kit are the
 `CMAKE_MODULE_PATH` line in the top-level `CMakeLists.txt` and the `exec` line
-in each of the two wrapper scripts.
+in each wrapper script under `scripts/`.
 
 ## 12. Layout reference
 
@@ -320,12 +372,16 @@ my-project/
   conanfile.py                    recipe, version parsed from CMakeLists.txt
   cmake/
     <project>Config.cmake.in      package config, overrides the kit template
-    projectkit/                   the kit, never edited per project
+    projectkit/                   the kit, updated with pk sync
+      docs/                       PK_SH, VERIFY_SH, PACKAGE_SH, ANALYSER_LAUNCHER_SH
       scripts/
+        pk.sh
         verify.sh
         package.sh
+        bootstrap.sh
         analyser-launcher.sh
         helpers/verify/{verify_base.sh,targets.sh}
+        helpers/pk/presets.cmake
       templates/
       test_package/
     toolchains/                   cross toolchain files
@@ -336,10 +392,15 @@ my-project/
   tests/<project>/                test sources
   tools/                          build-machine tools
   scripts/
+    pk.sh                         wrapper, sets PK_REPO_ROOT
     verify.sh                     wrapper, sets PK_REPO_ROOT
     package.sh                    wrapper, sets PK_REPO_ROOT
+    bootstrap.sh                  wrapper, in the template only
     helpers/verify/{verify.conf,consumer.cpp}
     helpers/package/package.conf
+    helpers/pk/pk.conf            optional pk settings
+    helpers/pk/upstream.conf      written by pk sync
+  docs/                           guides
 ```
 
 ## 13. First-run checklist
@@ -348,13 +409,13 @@ my-project/
 [ ] conan profile detect --force
 [ ] rename done and the diff reviewed
 [ ] ./scripts/package.sh reference prints <project>/<version>
-[ ] ./scripts/package.sh install --build_type=Debug
-[ ] cmake --preset native-debug
-[ ] cmake --build build/native-debug
-[ ] ctest --test-dir build/native-debug
+[ ] ./scripts/pk.sh doctor
+[ ] ./scripts/pk.sh build
+[ ] ./scripts/pk.sh test
 [ ] ./scripts/verify.sh run --build_type=Debug
 [ ] ./scripts/package.sh create
 [ ] git commit
+[ ] ./scripts/pk.sh sync (records the template commit the kit came from)
 ```
 
 ## 14. Troubleshooting the first hour
@@ -362,7 +423,7 @@ my-project/
 | symptom | cause |
 | ------------------------------------------------------------ | ----- |
 | `A build type must be specified` | Configured without a preset. Use `cmake --preset native-debug`. |
-| `Conan has not generated dependencies for Debug yet` | `package.sh install --build_type=Debug` has not been run for this build type. |
+| `Conan has not generated dependencies for Debug yet` | `package.sh install --build_type=Debug` has not been run for this build type. `pk build` runs it when needed. |
 | `is not the Conan output for that build type` | The preset's toolchain belongs to another build type. Use the matching preset, or pass `-DCMAKE_TOOLCHAIN_FILE` explicitly. |
 | `no sources found for '<project>'` | Sources are not under `src/<project>/`, or the rename left a directory behind. |
 | Shared build links but the consumer sees undefined symbols | Public headers are missing the `<PROJECT>_EXPORT` macro. |
