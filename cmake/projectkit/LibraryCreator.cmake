@@ -216,7 +216,10 @@ function(pk_create_library)
     PRIVATE_HEADERS
     LINK_PUBLIC
     LINK_PRIVATE
-    LINK_INTERFACE)
+    LINK_INTERFACE
+    DEPS_PUBLIC
+    DEPS_PRIVATE
+    DEPS_INTERFACE)
 
   cmake_parse_arguments(ARG
     "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
@@ -524,6 +527,13 @@ function(pk_create_library)
     LINK_PRIVATE ${ARG_LINK_PRIVATE}
     LINK_INTERFACE ${ARG_LINK_INTERFACE})
 
+  pk_deps_link(
+    ROLE LIBRARY
+    TARGETS ${${target_list_var}}
+    PUBLIC ${ARG_DEPS_PUBLIC}
+    PRIVATE ${ARG_DEPS_PRIVATE}
+    INTERFACE ${ARG_DEPS_INTERFACE})
+
   pk_register_targets(LIBRARY TARGETS ${${target_list_var}})
 
   if(${prefix}_INSTALL AND NOT ARG_NO_INSTALL)
@@ -538,6 +548,8 @@ function(pk_create_library)
         FILE_SET ${ARG_NAME}_generated_headers
           DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
     endif()
+
+    pk_register_targets(INSTALLED_LIBRARY TARGETS ${${target_list_var}})
 
     install(TARGETS ${${target_list_var}}
       EXPORT ${ARG_EXPORT_SET}
