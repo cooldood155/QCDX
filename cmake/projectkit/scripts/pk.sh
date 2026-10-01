@@ -1,25 +1,27 @@
 #!/usr/bin/env bash
 #
-# pk: one command line for every day-to-day ProjectKit workflow.
+# pk: one CLI for every day-to-day projectkit workflow.
 #
-#   ./scripts/pk.sh build                 deps + configure + build, Debug
-#   ./scripts/pk.sh run qcdx -- --flag    build one app and run it
-#   ./scripts/pk.sh test release          build with tests and run them
+#   ./scripts/pk.sh build                 deps + configure + build (Debug by default)
+#   ./scripts/pk.sh run qcdx -- --flag    build one specific app and run it
+#   ./scripts/pk.sh test release          build with tests and run them (Release mode)
 #   ./scripts/pk.sh stage                 install into stage/ and check it
-#   ./scripts/pk.sh full-clean            remove everything the project made
-#   ./scripts/pk.sh sync                  update the kit from the QCDX template
+#   ./scripts/pk.sh full-clean --yes      remove everything the project made
+#   ./scripts/pk.sh sync                  sync the kit from the QCDX template repo
 #   ./scripts/pk.sh help build            everything 'build' accepts
 #
 # Conan and CMake are still what does the work: every command pk runs is
-# printed before it runs, so nothing is hidden and everything can be copied.
+# printed before it runs, nothing is hidden; every command invocation and
+# output can be easily seen, copied, and parsed.
+#
 # pk only decides *which* commands are needed:
 #
 #   deps       re-run only when conanfile.py or a profile changed, or when the
 #              tests now need Catch2 and the last install skipped it
 #   configure  re-run only when the tree is new, the deps changed, or a flag
-#              asks for a value the tree does not have yet
+#              asks for a value the tree does not yet have defined
 #   options    are remembered per build tree, like the CMake cache they live
-#              in, until changed again or reset with --reset
+#              in, until changed again or reset with the --reset flag
 #
 # Kept compatible with bash 3.2 (macOS /bin/bash), like the rest of the kit.
 
@@ -49,8 +51,6 @@ if [[ -z "${PK_REPO_ROOT:-}" ]]; then
 fi
 export PK_REPO_ROOT
 
-# Project name, PK_PREFIX, colors, PK_EXE_SUFFIX and pk_cleanup come from the
-# verify base; host detection from the verify target registry.
 # shellcheck source=helpers/verify/verify_base.sh
 source "${SCRIPT_DIR}/helpers/verify/verify_base.sh"
 # shellcheck source=helpers/verify/targets.sh
@@ -76,8 +76,8 @@ fi
 : "${PK_NATIVE_PROFILE:=native}"
 : "${PK_FORMAT_EXCLUDE:=cmake/projectkit/ build/ stage/ _install/}"
 
-# Where 'pk sync' takes the kit from, and which paths it owns. A fork of the
-# template sets PK_UPSTREAM_URL in scripts/helpers/pk/pk.conf.
+# Where 'pk sync' takes the kit from and the paths it uses. A fork of the
+# template needs to set PK_UPSTREAM_URL in scripts/helpers/pk/pk.conf.
 : "${PK_UPSTREAM_URL:=https://github.com/cooldood155/QCDX.git}"
 : "${PK_UPSTREAM_BRANCH:=main}"
 : "${PK_SYNC_PATHS:=cmake/projectkit scripts/pk.sh scripts/verify.sh scripts/package.sh}"
@@ -119,6 +119,7 @@ pk_self() {
 pk_show_command() {
   local arg
   printf '%s+%s' "$PK_YELLOW" "$PK_RESET"
+
   for arg in "$@"; do
     case "$arg" in
       "") printf " ''" ;;
@@ -130,7 +131,7 @@ pk_show_command() {
   printf '\n'
 }
 
-# Prints the command, then runs it unless this is a dry run.
+# Always prints the command, invokes it (unless this is a dry run).
 pk_run() {
   pk_show_command "$@"
   [[ "$DRY_RUN" -eq 1 ]] && return 0
@@ -145,22 +146,24 @@ pk_install_hint() {
         clang-tidy|clang-format) echo "pacman -S ${prefix:-mingw-w64-ucrt-x86_64}-clang-tools-extra" ;;
         *) echo "pacman -S ${prefix:-mingw-w64-ucrt-x86_64}-${tool}" ;;
       esac ;;
+
     macos)
       case "$tool" in
         clang-tidy|clang-format) echo "brew install llvm" ;;
         *) echo "brew install ${tool}" ;;
       esac ;;
+
     *) echo "sudo apt install ${tool}   (or your distribution's package)" ;;
   esac
 }
 
-# Stops before any work when a command's tools are missing.
 pk_require_tools() {
   local tool missing=""
   for tool in "$@"; do
     command -v "$tool" >/dev/null 2>&1 || missing="${missing} ${tool}"
   done
   [[ -z "$missing" ]] && return 0
+
   printf '%serror:%s %s needs:%s\n' "$PK_RED" "$PK_RESET" "$CMD" "$missing" >&2
   for tool in $missing; do
     printf '  install %s: %s\n' "$tool" "$(pk_install_hint "$tool")" >&2
@@ -171,13 +174,35 @@ pk_require_tools() {
 pk_lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 pk_upper() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
 
-# Conan and the MinGW CMake are native Windows programs under MSYS2.
+# Conan and MinGW CMake are native Windows programs under MSYS2.
 pk_native_path() {
   if command -v cygpath >/dev/null 2>&1; then
     cygpath -m "$1"
   else
     printf '%s\n' "$1"
   fi
+}
+
+# 'pk dep' is written as a Python script
+pk_python() {
+  local candidate
+  for candidate in "${PK_PYTHON:-}" python3 python; do
+    [[ -n "$candidate" ]] || continue
+
+    if command -v "$candidate" >/dev/null 2>&1 &&
+       "$candidate" -c 'import sys; sys.exit(sys.version_info < (3, 8))' 2>/dev/null; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+pk_dep_exec() {
+  local python
+  python="$(pk_python)" || pk_die "pk dep needs Python 3.8+ (the one Conan uses works; set PK_PYTHON)"
+  PK_CONAN="${PK_CONAN:-conan}" PK_NATIVE_PROFILE="$PK_NATIVE_PROFILE" \
+    exec "$python" "${SCRIPT_DIR}/helpers/pk/deps.py" "$@"
 }
 
 pk_repo_script() {
@@ -189,10 +214,10 @@ pk_repo_script() {
 }
 
 # -----------------------------------------------------------------------------
-# Commands and flags: one table drives parsing, help and completion
+# Commands and flags
 # -----------------------------------------------------------------------------
 
-PK_COMMANDS="build run test configure deps install stage rebuild clean
+PK_COMMANDS="build run test configure deps dep install stage rebuild clean
   full-clean analyze memcheck sanitize format status list doctor sync verify
   package rename help shell-init"
 
@@ -203,6 +228,7 @@ pk_command_summary() {
     test)       echo "build with tests turned on, then run them with ctest" ;;
     configure)  echo "install deps and (re)configure the build tree, no build" ;;
     deps)       echo "install Conan dependencies for a build type (profiles/native)" ;;
+    dep)        echo "add, set, rm, update, lock, check, why, tree: deps.json + conan.lock" ;;
     install)    echo "build, then install into stage/ (or --prefix), no checks" ;;
     stage)      echo "fresh install into stage/, checked like verify.sh, with a report" ;;
     rebuild)    echo "delete the build tree, then build from scratch" ;;
@@ -249,15 +275,18 @@ pk_resolve_command() {
     [[ "$name" == "$word" ]] && { printf '%s\n' "$name"; return 0; }
   done
   pk_command_alias "$word" && return 0
+
   for name in $PK_COMMANDS; do
     case "$name" in
       "$word"*) matches="${matches} ${name}"; count=$((count + 1)) ;;
     esac
   done
+
   if [[ "$count" -eq 1 ]]; then
     printf '%s\n' "${matches# }"
     return 0
   fi
+
   if [[ "$count" -gt 1 ]]; then
     printf 'ambiguous:%s\n' "$matches"
   else
@@ -551,7 +580,7 @@ pk_help_command() {
 }
 
 # -----------------------------------------------------------------------------
-# Build types, presets and trees
+# Build types & presets & trees
 # -----------------------------------------------------------------------------
 
 pk_parse_type() {
@@ -574,6 +603,7 @@ pk_preset_dirs() {
   local answer
   answer="$(pk_preset_query dirs "$1")"
   [[ -z "$answer" || "$answer" == "missing" ]] && return 1
+
   PRESET_BIN="$(printf '%s\n' "$answer" | sed -n 's/^binary|//p')"
   PRESET_TOOLCHAIN="$(printf '%s\n' "$answer" | sed -n 's/^toolchain|//p')"
   return 0
@@ -598,6 +628,7 @@ pk_app_names() {
   if [[ -d apps ]]; then
     for dir in apps/*/; do
       [[ -d "$dir" ]] || continue
+
       dir="${dir%/}"
       printf '%s\n' "${dir#apps/}"
     done
@@ -685,6 +716,7 @@ pk_flag_value() {
     return 0
   fi
   [[ "$has_next" -eq 1 ]] || pk_usage_die "$arg needs a value"
+
   FLAG_VALUE="$next"
   FLAG_SHIFT=2
 }
@@ -820,7 +852,7 @@ pk_parse_args() {
 }
 
 # -----------------------------------------------------------------------------
-# Selection: which preset, tree and Conan output this run works on
+# Selection: what preset, tree and Conan output this run works on
 # -----------------------------------------------------------------------------
 
 pk_select() {
@@ -864,10 +896,11 @@ pk_banner() {
 # Dependencies
 # -----------------------------------------------------------------------------
 
-# Changes to anything that feeds 'conan install' change this key.
+# Changes to anything that effects 'conan install' requries this key to be changed.
 pk_deps_key() {
   local host_profile="$1" file files=""
-  for file in conanfile.py conanfile.txt "profiles/${PK_NATIVE_PROFILE}" "$host_profile"; do
+  for file in conanfile.py conanfile.txt deps.json conan.lock \
+      "profiles/${PK_NATIVE_PROFILE}" "$host_profile"; do
     [[ -n "$file" && -f "$file" ]] && files="${files} ${file}"
   done
   # shellcheck disable=SC2086
@@ -880,16 +913,16 @@ pk_stamp_get() {
   sed -n "s/^${key}=//p" "$stamp" | head -n 1
 }
 
-# 0 = current, 1 = needs an install. Prints why on stdout.
 pk_deps_current() {
   local conan_dir="$1" toolchain="$2" host_profile="$3" want_tests="$4"
   if [[ ! -f "$toolchain" ]]; then
     echo "not installed yet"; return 1
   fi
+
   local key tests
   key="$(pk_stamp_get "$conan_dir" key)" || { echo "installed outside pk, reinstalling once"; return 1; }
   if [[ "$key" != "$(pk_deps_key "$host_profile")" ]]; then
-    echo "conanfile.py or a profile changed"; return 1
+    echo "conanfile.py, deps.json, conan.lock or a profile changed"; return 1
   fi
   tests="$(pk_stamp_get "$conan_dir" tests || echo 0)"
   if [[ "$want_tests" -eq 1 && "$tests" != "1" ]]; then
@@ -899,8 +932,6 @@ pk_deps_current() {
   return 0
 }
 
-# Installs through scripts/package.sh so the profile logic lives in one place.
-# Sets DEPS_CHANGED=1 when an install ran.
 pk_ensure_deps() {
   local build_type="$1" cross="$2" conan_dir="$3" toolchain="$4" want_tests="$5"
   local host_profile="" label="native" why
@@ -946,8 +977,6 @@ pk_ensure_deps() {
   DEPS_CHANGED=1
 }
 
-# Cross builds run code generators from the host-tools tree, built natively
-# in the same build type, exactly like the verify cross stages do.
 pk_ensure_host_tools() {
   pk_preset_dirs host-tools || { pk_info "no host-tools preset, skipping host tools"; return 0; }
   local tools_tree="$PRESET_BIN"
@@ -979,8 +1008,8 @@ pk_ensure_host_tools() {
 # Configure and build
 # -----------------------------------------------------------------------------
 
-# Tests: an explicit flag wins, then what the command needs, then what the
-# tree already has, then off.
+# Checks for flag first, then what the command needs, then what the tree
+# has, then off.
 pk_decide_tests() {
   local needs="$1" cached
   if [[ -n "$TESTS" ]]; then
@@ -1049,7 +1078,7 @@ pk_configure() {
   pk_run cmake "${args[@]}" || pk_die "configure failed"
 }
 
-# deps, host tools and configure, in that order, each only when needed.
+# deps, host tools and configuration, only when needed.
 pk_prepare() {
   local needs_tests="$1" force_configure="$2"
   pk_select
@@ -1074,6 +1103,7 @@ pk_build() {
   elif [[ ${#TARGETS[@]} -gt 0 ]]; then
     args+=(--target "${TARGETS[@]}")
   fi
+
   case "$CMD" in
     build|rebuild|install|analyze)
       [[ ${#EXTRA[@]} -gt 0 ]] && args+=(-- "${EXTRA[@]}") ;;
@@ -1107,10 +1137,12 @@ cmd_deps() {
   pk_no_positionals
   pk_select
   pk_banner
+
   DEPS_CHANGED=0
   local want=0 cached
   cached="$(pk_cache_get "$TREE" "${PK_PREFIX}_BUILD_TESTS" || true)"
   [[ "$(pk_normalize_value "$cached")" == "ON" ]] && want=1
+
   if [[ -n "$CROSS" ]]; then
     pk_ensure_host_tools
   fi
@@ -1230,6 +1262,7 @@ cmd_sanitize() {
     [[ "${def%%=*}" == "${PK_PREFIX}_SANITIZE" ]] && has_sanitize=1
   done
   [[ "$has_sanitize" -eq 0 ]] && pk_add_option SANITIZE "address,undefined"
+
   pk_variant_command sanitize on
   pk_build
   pk_ctest
@@ -1263,7 +1296,6 @@ pk_relative() {
 }
 
 # Everything the project's scripts, CMake, Conan and clangd can generate.
-# Absolute paths, only those that exist right now.
 pk_full_clean_paths() {
   local path
   {
@@ -1290,10 +1322,12 @@ pk_confirm() {
   if [[ ! -t 0 ]]; then
     pk_die "not asking on a non-interactive input: pass --yes to delete"
   fi
+
   local answer
   printf '%s [y/N] ' "$1"
   read -r answer
-  [[ "$answer" == "y" || "$answer" == "Y" || "$answer" == "yes" ]]
+  local low_answer=$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')
+  [[ "$low_answer" == "y" || "$low_answer" == "yes" ]]
 }
 
 cmd_full_clean() {
@@ -1307,9 +1341,11 @@ cmd_full_clean() {
   else
     while IFS= read -r path; do
       [[ -z "$path" ]] && continue
+
       size="$(du -sh "$path" 2>/dev/null | cut -f1)"
       printf '  %-8s %s\n' "${size:--}" "$(pk_relative "$path")"
     done <<< "$paths"
+
     if [[ "$CLEAN_CACHE" -eq 1 ]]; then
       printf '  %-8s %s\n' "cache" "this package in the local Conan cache"
     fi
@@ -1321,6 +1357,7 @@ cmd_full_clean() {
         [[ -z "$path" ]] && continue
         pk_run rm -rf "$path"
       done <<< "$paths"
+
       rmdir "${PK_REPO_ROOT}/.cache" 2>/dev/null || true
       if [[ "$CLEAN_CACHE" -eq 1 ]]; then
         pk_run "$(pk_repo_script package)" remove --yes || pk_warn "removing the Conan cache entry failed"
@@ -1359,7 +1396,7 @@ cmd_full_clean() {
 }
 
 # -----------------------------------------------------------------------------
-# stage: verify.sh's install and consumer stages for the tree you work in
+# stage
 # -----------------------------------------------------------------------------
 
 PK_REPORT=""
@@ -1373,8 +1410,6 @@ pk_report() {
   PK_REPORT="${PK_REPORT}${line#|}"$'\n'
 }
 
-# Every pass/fail/skip the verify base prints is also recorded in the report,
-# including the ones its consumer stage makes.
 pk_report_checks() {
   eval "$(declare -f pk_pass | sed '1s/^pk_pass/pk_verify_pass/')"
   eval "$(declare -f pk_fail | sed '1s/^pk_fail/pk_verify_fail/')"
@@ -1505,7 +1540,7 @@ cmd_stage() {
 }
 
 # -----------------------------------------------------------------------------
-# sync: the template's kit changes, applied as a 3-way merge
+# sync
 # -----------------------------------------------------------------------------
 
 pk_state_get() {
@@ -1530,8 +1565,6 @@ pk_normalize_url() {
     -e 's|\.git$||' -e 's|/*$||' | tr '[:upper:]' '[:lower:]'
 }
 
-# A local clone is only good on this machine, so --from with a path is used
-# for this sync but the committed file keeps a URL everyone can fetch.
 pk_sync_remembered_url() {
   case "$1" in
     *://*|*@*:*) printf '%s\n' "$1" ;;
@@ -1539,7 +1572,6 @@ pk_sync_remembered_url() {
   esac
 }
 
-# The template commit whose kit is closest to this project's committed kit.
 pk_sync_detect_base() {
   local tip="$1" commit lines best="" best_lines=""
   # shellcheck disable=SC2086
@@ -1547,6 +1579,7 @@ pk_sync_detect_base() {
     # shellcheck disable=SC2086
     lines="$(git diff --numstat "$commit" HEAD -- $PK_SYNC_PATHS \
       | awk '{ if ($1 != "-") n += $1 + $2 } END { print n + 0 }')"
+
     if [[ -z "$best_lines" || "$lines" -lt "$best_lines" ]]; then
       best="$commit"
       best_lines="$lines"
@@ -1861,10 +1894,12 @@ pk_tool_line() {
     printf '  %sOK%s    %-13s %s\n' "$PK_GREEN" "$PK_RESET" "$tool" "$version"
     return 0
   fi
+
   if [[ "$need" == "required" ]]; then
     printf '  %sMISS%s  %-13s required\n' "$PK_RED" "$PK_RESET" "$tool"
     return 1
   fi
+
   printf '  %s--%s    %-13s optional: %s\n' "$PK_YELLOW" "$PK_RESET" "$tool" "$need"
   return 0
 }
@@ -1946,7 +1981,7 @@ cmd_doctor() {
 
 cmd_shell_init() {
   cat <<'EOF'
-# ProjectKit 'pk': runs the nearest scripts/pk.sh from anywhere in a project.
+# projectkit 'pk': runs the nearest scripts/pk.sh from anywhere in a project.
 pk() {
   local dir="$PWD"
   while [ "$dir" != "/" ]; do
@@ -1976,7 +2011,6 @@ complete -o default -F _pk_complete pk
 EOF
 }
 
-# Candidates for shell completion: commands, flags, types, apps, cross names.
 cmd_words() {
   local command="${1:-}" cur="${2:-}" resolved flag spelling part
   if [[ -z "$command" ]]; then
@@ -1985,6 +2019,7 @@ cmd_words() {
     return 0
   fi
   resolved="$(pk_resolve_command "$command")" || return 0
+
   case "$cur" in
     -*)
       for flag in $(pk_command_flags "$resolved"); do
@@ -1997,6 +2032,7 @@ cmd_words() {
       done
       printf '%s\n' --help
       ;;
+
     *)
       case "$resolved" in
         help)
@@ -2004,6 +2040,9 @@ cmd_words() {
           printf '%s\n' $PK_COMMANDS ;;
         verify) printf '%s\n' list list-possible run run-possible clean help ;;
         package) printf '%s\n' reference install create build export export-pkg list info path editable remove upload cache-clean help ;;
+        dep)
+          printf '%s\n' ls add set rm update lock check why tree help
+          [[ -f deps.json ]] && sed -n 's/^    "\([a-z0-9_.+-]*\)": {$/\1/p' deps.json ;;
         format|status|doctor|list|shell-init|rename|full-clean|sync) ;;
         *)
           printf '%s\n' debug release relwithdebinfo minsizerel
@@ -2049,6 +2088,7 @@ main() {
 
   case "$CMD" in
     verify)  exec "$(pk_repo_script verify)" "$@" ;;
+    dep)     pk_dep_exec "$@" ;;
     package) exec "$(pk_repo_script package)" "$@" ;;
     rename)  exec "$(pk_repo_script bootstrap)" "$@" ;;
     help)
@@ -2057,6 +2097,7 @@ main() {
       else
         local topic
         topic="$(pk_resolve_command "$1")" || pk_usage_die "no command '$1'"
+        [[ "$topic" == "dep" ]] && pk_dep_exec help "${@:2}"
         CMD="$topic"
         pk_help_command "$topic"
       fi
