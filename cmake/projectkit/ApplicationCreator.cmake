@@ -22,7 +22,8 @@ function(pk_create_app)
     PUBLIC_HEADERS
     PRIVATE_HEADERS
     LINK_PRIVATE
-    LINK_INTERFACE)
+    LINK_INTERFACE
+    DEPS)
 
   cmake_parse_arguments(ARG
     "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
@@ -238,6 +239,11 @@ function(pk_create_app)
     TARGETS ${ARG_TARGET_NAME}
     LINK_PRIVATE ${ARG_LINK_PRIVATE}
     LINK_INTERFACE ${ARG_LINK_INTERFACE})
+
+  pk_deps_link(
+    ROLE APPLICATION
+    TARGETS ${ARG_TARGET_NAME}
+    PRIVATE ${ARG_DEPS})
 
   foreach(target IN LISTS ARG_TARGET_NAME)
     pk_enable_static_analysis(${target})

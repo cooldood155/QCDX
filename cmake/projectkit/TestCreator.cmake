@@ -13,7 +13,8 @@ function(pk_create_test)
 
   set(multi_value_args
     SOURCES
-    LINK_PRIVATE)
+    LINK_PRIVATE
+    DEPS)
 
   cmake_parse_arguments(ARG
     "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
@@ -31,7 +32,7 @@ function(pk_create_test)
   if(NOT COMMAND catch_discover_tests)
     message(FATAL_ERROR
       "pk_create_test (func): 'catch_discover_tests' is not defined; call "
-      "find_package(Catch2 3 REQUIRED) and include(Catch) first.")
+      "pk_deps_find(catch2) and include(Catch) first.")
   endif()
 
   if(NOT ARG_LABEL)
@@ -114,6 +115,11 @@ function(pk_create_test)
         ${library}
         ${ARG_LINK_PRIVATE}
         Catch2::Catch2WithMain)
+
+    pk_deps_link(
+      ROLE TEST
+      TARGETS ${test_target}
+      PRIVATE ${ARG_DEPS})
 
     pk_enable_static_analysis(${test_target})
 
