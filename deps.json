@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "packages": {
+    "catch2": {
+      "ref": "catch2/[>=3.7.1 <4]",
+      "kind": "test",
+      "cmake": {
+        "package": "Catch2",
+        "version": "3",
+        "targets": [
+          "Catch2::Catch2WithMain"
+        ],
+        "extra_targets": [
+          "Catch2::Catch2"
+        ]
+      },
+      "notes": "Unit tests; auto linked by the CMake command 'pk_create_test'."
+    },
+    "cmake": {
+      "ref": "cmake/[>=3.30 <5]",
+      "kind": "tool",
+      "notes": "Pins CMake; Conan relies on this pin for its builds."
+    }
+  }
+}

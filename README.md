@@ -78,6 +78,7 @@ Then replace this README with your own project's.
 | `pk run [APP] -- ARGS` | build one application and run it |
 | `pk test [TYPE]` | build with tests and run them with ctest |
 | `pk stage` | install into `stage/`, check the package and write a report |
+| `pk dep ...` | add, change, remove, update and inspect third-party packages |
 | `pk status` | the build trees, their options and dependency state |
 | `pk sync` | pull projectkit updates from this template |
 | `pk full-clean` | remove everything the build generated |

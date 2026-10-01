@@ -1,5 +1,6 @@
 # pyright: reportAttributeAccessIssue=false, reportOptionalCall=false, reportArgumentType=false, reportCallIssue=false
 
+from json import load as json_load
 from os import path
 from re import search, IGNORECASE
 from conan import ConanFile
@@ -26,7 +27,10 @@ class QcdxRecipe(ConanFile):
     "fPIC": True
   }
 
+  exports = "deps.json"
+
   exports_sources = (
+    "deps.json",
     "CMakeLists.txt",
     "cmake/*",
     "include/*",
@@ -72,9 +76,47 @@ class QcdxRecipe(ConanFile):
       "set(QCDX_TOOLCHAIN_SHARED {})\n".format(
         "ON" if self.options.get_safe("shared") else "OFF"))
 
+  # ---------------------------------------------------------------------------
+  # Dependencies (deps.json): CRUD dependencies via 'pk dep add|set|rm|update'.
+  # Schema and checks: cmake/projectkit/docs/PK_DEP.md.
+  # ---------------------------------------------------------------------------
+
+  _PK_DEP_TRAITS = ("headers", "libs", "run", "visible", "transitive_headers",
+                    "transitive_libs", "force", "override")
+
+  def _pk_deps(self):
+    deps_json = path.join(self.recipe_folder, "deps.json")
+    if not path.isfile(deps_json):
+      return {}
+
+    with open(deps_json, encoding="utf-8") as handle:
+      data = json_load(handle)
+    if data.get("schema") != 1:
+      raise ValueError("deps.json: unsupported schema {!r}".format(
+        data.get("schema")))
+
+    return data.get("packages", {})
+
+  def requirements(self):
+    for name, dep in self._pk_deps().items():
+      if dep.get("kind", "requires") != "requires":
+        continue
+
+      traits = dep.get("traits", {})
+      unknown = sorted(set(traits) - set(self._PK_DEP_TRAITS))
+      if unknown:
+        raise ValueError("deps.json: '{}' has unknown traits {}".format(
+          name, unknown))
+
+      self.requires(dep["ref"], **traits)
+
   def build_requirements(self):
-    self.test_requires("catch2/[>=3.7.1]")
-    self.tool_requires("cmake/[>=3.30]")
+    for dep in self._pk_deps().values():
+      kind = dep.get("kind", "requires")
+      if kind == "test":
+        self.test_requires(dep["ref"])
+      elif kind == "tool":
+        self.tool_requires(dep["ref"])
 
   def build(self):
     cmake = CMake(self)
@@ -89,6 +131,9 @@ class QcdxRecipe(ConanFile):
   def configure(self):
     if self.options.shared:
       self.options.rm_safe("fPIC")
+    for name, dep in self._pk_deps().items():
+      for option, value in dep.get("options", {}).items():
+        setattr(self.options[name], option, value)
 
   def layout(self):
     cmake_layout(self)
