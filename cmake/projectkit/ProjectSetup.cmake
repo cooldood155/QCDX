@@ -180,6 +180,8 @@ macro(pk_project_setup)
 
   pk_set_state(DEFAULT_LINKS
     "${PROJECT_NAME}::warnings" "${PROJECT_NAME}::options")
+
+  _pk_deps_load()
 endmacro()
 
 function(pk_check_shared_intent)

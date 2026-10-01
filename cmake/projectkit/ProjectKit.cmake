@@ -7,6 +7,7 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
 include("${CMAKE_CURRENT_LIST_DIR}/ProjectSetup.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/Dependencies.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/CompilerWarnings.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/ProjectOptions.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/StaticAnalysis.cmake")
