@@ -1,4 +1,4 @@
-find_package(Catch2 3 REQUIRED)
+pk_deps_find(catch2)
 include(Catch)
 
 pk_create_test(NAME qcdx)
