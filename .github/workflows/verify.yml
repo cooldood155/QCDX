@@ -98,13 +98,19 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/conan2/p
-          key: conan-${{ matrix.target }}-${{ hashFiles('conanfile.py', 'profiles/**') }}
+          key: conan-${{ matrix.target }}-${{ hashFiles('conanfile.py', 'deps.json', 'conan.lock', 'profiles/**') }}
           restore-keys: conan-${{ matrix.target }}-
 
       - name: Detect the default Conan profile
         env:
           CONAN_HOME: ${{ runner.temp }}/conan2
         run: conan profile detect --force
+
+      - name: Check dependencies
+        if: matrix.target == 'linux-x86_64'
+        env:
+          CONAN_HOME: ${{ runner.temp }}/conan2
+        run: ./scripts/pk.sh dep check
 
       - name: Verify
         env:
@@ -150,7 +156,7 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/conan2/p
-          key: conan-windows-ucrt64-${{ hashFiles('conanfile.py', 'profiles/**') }}
+          key: conan-windows-ucrt64-${{ hashFiles('conanfile.py', 'deps.json', 'conan.lock', 'profiles/**') }}
           restore-keys: conan-windows-ucrt64-
 
       - name: Detect the default Conan profile
