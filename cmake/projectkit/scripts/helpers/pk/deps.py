@@ -242,12 +242,10 @@ class Repo:
             return ["-pr:a", resolve(profile)]
         return ["-pr:b", resolve(self.native), "-pr:h", resolve(profile)]
 
-    def run(self, args, capture=False, check=True, quiet=False):
+    def _exec(self, args, capture, check, quiet):
         cmd = [self.conan] + args
         if not quiet:
             show_command(cmd)
-        if self.dry_run and not capture:
-            return None
 
         try:
             proc = subprocess.run(cmd, cwd=self.root, universal_newlines=True,
@@ -262,6 +260,18 @@ class Repo:
                 detail = "\n" + "\n".join(proc.stderr.strip().splitlines()[-15:])
             raise PkDepError("'{} {}' failed{}".format(self.conan, args[0], detail))
         return proc
+
+    def run(self, args, check=True, quiet=False):
+        """Conan command run for its side effects; --dry-run only prints it."""
+        if self.dry_run:
+            if not quiet:
+                show_command([self.conan] + args)
+            return
+        self._exec(args, False, check, quiet)
+
+    def capture(self, args, check=True, quiet=False):
+        """Conan command run for its output, even under --dry-run."""
+        return self._exec(args, True, check, quiet)
 
     def lock_create(self, update=False, clean=False):
         """Create or extend conan.lock; already-locked packages keep their pins.
@@ -315,7 +325,7 @@ class Repo:
         args = ["graph", "info", "."] + self.profile_args(profile)
         args += ["-c", "tools.graph:skip_test=False", "--format=json"]
         info("reading the Conan graph ({})".format(profile))
-        proc = self.run(args, capture=True, quiet=True)
+        proc = self.capture(args, quiet=True)
         data = json.loads(proc.stdout)
         os.makedirs(self.scratch, exist_ok=True)
 
@@ -510,7 +520,7 @@ def discover_cmake(repo, name, entry):
         args += ["-o", "{}/*:{}={}".format(name, option, value)]
 
     step("discover CMake names for {} (builds the binary if it is missing)".format(ref))
-    proc = repo.run(args, capture=True)
+    proc = repo.capture(args)
     graph = json.loads(proc.stdout)
     node = None
     for candidate in graph["graph"]["nodes"].values():
@@ -738,6 +748,12 @@ def users_of(usage, name):
 # -----------------------------------------------------------------------------
 
 
+def _ref_label(ref):
+    """'name/version' from a lockfile ref OR ref itself."""
+    match = LOCK_REF_RE.match(ref)
+    return match.group(0) if match else ref
+
+
 def graph_index(graph):
     nodes = graph["graph"]["nodes"]
     by_id = {}
@@ -862,7 +878,7 @@ def cmd_ls(repo, args):
         if missing:
             warn("not in conan.lock: {}. Run 'pk dep lock'.".format(", ".join(missing)))
 
-    if usage_path:
+    if usage is not None:
         info("usage from {}".format(usage_path))
         unmanaged = sorted({u for t in usage.get("targets", {}).values()
                             for u in t.get("unmanaged", [])})
@@ -1239,7 +1255,7 @@ def cmd_check(repo, args):
                                 "'pk dep lock'".format(name))
 
         lock_refs = set()
-        for section in ("requires", "build_requires", "python_requires"):
+        for section in ("requires", "build_requires"):
             lock_refs |= {r.split("%", 1)[0] for r in (repo.load_lock() or {}).get(section, [])}
         used_refs = set()
 
@@ -1247,9 +1263,7 @@ def cmd_check(repo, args):
             probe = ["graph", "info", "."] + repo.profile_args(profile)
             probe += ["-c", "tools.graph:skip_test=False", "--lockfile=conan.lock",
                       "--format=json"]
-            proc = repo.run(probe, capture=True, check=False)
-            if proc is None:
-                continue
+            proc = repo.capture(probe, check=False)
 
             if proc.returncode != 0:
                 errors = [l for l in (proc.stderr or "").splitlines() if "ERROR" in l]
@@ -1268,7 +1282,7 @@ def cmd_check(repo, args):
         if stale and used_refs:
             notes.append("conan.lock has entries {} not used by profile(s) {} (fine if "
                          "another profile needs them; 'pk dep lock --clean' prunes)".format(
-                             ", ".join(LOCK_REF_RE.match(r).group(0) for r in stale),
+                             ", ".join(_ref_label(r) for r in stale),
                              ", ".join(repo.profiles)))
         if not problems:
             info("every package resolves from conan.lock")
