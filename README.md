@@ -128,6 +128,28 @@ private headers in `src/<name>/` can be C++.
 The full walkthrough, including tools and cross builds, is in
 [`docs/FROM_ZERO_TO_PROJECT.md`](docs/FROM_ZERO_TO_PROJECT.md).
 
+## Dependencies
+
+Third-party packages are declared once, in `deps.json`, and pinned in
+`conan.lock`; both are committed. `conanfile.py` and the CMake creators read
+the deps.json.
+
+```bash
+pk dep add "sqlite3/[>=3.45 <4]"   # declare, lock (pin) and discover package/target
+pk dep ls                          # what is declared, locked and used by what
+pk dep why zlib                    # who pulls this package in and who uses it
+pk dep update sqlite3              # newest version within the range
+pk dep check                       # deps.json, CMake and the lock all match
+```
+
+```cmake
+pk_create_library(NAME myproject ... DEPS_PRIVATE sqlite3)
+```
+
+Versions only change when you ask (`add`, `update`, or a new range); builds
+fail rather than resolve past the lock. Details:
+[`PK_DEP.md`](cmake/projectkit/docs/PK_DEP.md).
+
 ## Cross builds
 
 Each cross target is a Conan profile in `profiles/` plus matching presets:
@@ -209,6 +231,7 @@ my-project/
 | [`docs/FROM_ZERO_TO_PROJECT.md`](docs/FROM_ZERO_TO_PROJECT.md) | from an empty directory to a packaged project |
 | [`docs/BUILDING.md`](docs/BUILDING.md) | supported platforms, toolchains and cross targets |
 | [`PK_SH.md`](cmake/projectkit/docs/PK_SH.md) | every `pk` command, flag and setting |
+| [`PK_DEP.md`](cmake/projectkit/docs/PK_DEP.md) | `deps.json`, `conan.lock`, `pk dep` and `DEPS_*` |
 | [`VERIFY_SH.md`](cmake/projectkit/docs/VERIFY_SH.md) | the verification pipeline and its targets |
 | [`PACKAGE_SH.md`](cmake/projectkit/docs/PACKAGE_SH.md) | Conan packaging, editable mode and uploads |
 | [`ANALYSER_LAUNCHER_SH.md`](cmake/projectkit/docs/ANALYSER_LAUNCHER_SH.md) | clang-tidy and cppcheck integration |
