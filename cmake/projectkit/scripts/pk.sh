@@ -217,55 +217,57 @@ pk_repo_script() {
 # Commands and flags
 # -----------------------------------------------------------------------------
 
-PK_COMMANDS="build run test configure deps dep install stage rebuild clean
-  full-clean analyze memcheck sanitize format status list doctor sync verify
-  package rename help shell-init"
+read -r -d '' PK_COMMAND_TABLE <<'EOF_TABLE' || true
+build and run|configure|c|cfg conf|install deps and (re)configure the build tree, no build
+build and run|build|b||install deps, configure and build what is needed
+build and run|rebuild|||delete the build tree, then build from scratch
+build and run|run|r||build one app and run it, forwarding args after --
+build and run|test|t||build with tests turned on, then run them with ctest
+dependencies|deps|||install Conan deps for a build type (profiles/native)
+dependencies|dep|||manage deps.json/conan.lock (add, rm, update, lock, ...)
+install and ship|install|i||build, then install into stage/ (or --prefix), no checks
+install and ship|stage|||fresh install into stage/, checked, with a report
+install and ship|verify||check|full verification matrix (scripts/verify.sh)
+install and ship|package|||Conan packaging: create, upload, ... (scripts/package.sh)
+code quality|analyze|||build with clang-tidy and cppcheck (own tree)
+code quality|sanitize|||build and test with sanitizers (own tree)
+code quality|memcheck|||run the tests under Valgrind (own tree)
+code quality|format|fmt||clang-format every C and C++ file (or --check)
+cleanup|clean|||delete one build tree (--deps: its Conan output too)
+cleanup|full-clean||purge distclean|delete everything generated, stage/ included
+inspect|status|st||show build trees, their options and dependency state
+inspect|list|ls||list build types, apps, cross targets and presets
+inspect|doctor|||check tools and environment (--fix to repair)
+project and shell|sync||upgrade|update cmake/projectkit from the QCDX template
+project and shell|rename||bootstrap|rename a project made from the template
+project and shell|help|||show help ('help <command>' for one command)
+project and shell|shell-init|||print a 'pk' function + completion for ~/.bashrc
+EOF_TABLE
+
+PK_COMMANDS=""
+while IFS='|' read -r _group _cmd _rest; do
+  [[ -n "$_cmd" ]] && PK_COMMANDS="${PK_COMMANDS} ${_cmd}"
+done <<< "$PK_COMMAND_TABLE"
+PK_COMMANDS="${PK_COMMANDS# }"
+unset _group _cmd _rest
 
 pk_command_summary() {
-  case "$1" in
-    build)      echo "install deps, configure and build what is needed (default: Debug)" ;;
-    run)        echo "build one application and run it, forwarding args after --" ;;
-    test)       echo "build with tests turned on, then run them with ctest" ;;
-    configure)  echo "install deps and (re)configure the build tree, no build" ;;
-    deps)       echo "install Conan dependencies for a build type (profiles/native)" ;;
-    dep)        echo "add, set, rm, update, lock, check, why, tree: deps.json + conan.lock" ;;
-    install)    echo "build, then install into stage/ (or --prefix), no checks" ;;
-    stage)      echo "fresh install into stage/, checked like verify.sh, with a report" ;;
-    rebuild)    echo "delete the build tree, then build from scratch" ;;
-    clean)      echo "delete one build tree, and its Conan output with --deps" ;;
-    full-clean) echo "delete everything the project generates, stage/ included" ;;
-    analyze)    echo "build with clang-tidy and cppcheck in their own tree" ;;
-    memcheck)   echo "run the tests under Valgrind in their own tree" ;;
-    sanitize)   echo "build and test with sanitizers in their own tree" ;;
-    format)     echo "clang-format every C and C++ file (or --check)" ;;
-    status)     echo "show build trees, their options and dependency state" ;;
-    list)       echo "list build types, apps, cross targets and presets" ;;
-    doctor)     echo "check tools and environment, --fix what can be fixed" ;;
-    sync)       echo "update the kit (cmake/projectkit) from the QCDX template" ;;
-    verify)     echo "full verification matrix (runs scripts/verify.sh)" ;;
-    package)    echo "Conan packaging: create, upload... (runs scripts/package.sh)" ;;
-    rename)     echo "rename a project made from the template (scripts/bootstrap.sh)" ;;
-    help)       echo "show help, for one command with 'help <command>'" ;;
-    shell-init) echo "print a 'pk' shell function + completion for ~/.bashrc" ;;
-  esac
+  local group cmd short also summary
+  while IFS='|' read -r group cmd short also summary; do
+    [[ "$cmd" == "$1" ]] && { printf '%s\n' "$summary"; return 0; }
+  done <<< "$PK_COMMAND_TABLE"
+  return 1
 }
 
 pk_command_alias() {
-  case "$1" in
-    b) echo build ;;
-    r) echo run ;;
-    t) echo test ;;
-    c|cfg|conf) echo configure ;;
-    i) echo install ;;
-    st) echo status ;;
-    ls) echo list ;;
-    fmt) echo format ;;
-    check) echo verify ;;
-    bootstrap) echo rename ;;
-    purge|distclean) echo full-clean ;;
-    upgrade) echo sync ;;
-    *) return 1 ;;
-  esac
+  local group cmd short also summary name
+  [[ -n "$1" ]] || return 1
+  while IFS='|' read -r group cmd short also summary; do
+    for name in $short $also; do
+      [[ "$name" == "$1" ]] && { printf '%s\n' "$cmd"; return 0; }
+    done
+  done <<< "$PK_COMMAND_TABLE"
+  return 1
 }
 
 # Exact name, alias, or unambiguous prefix.
@@ -518,39 +520,52 @@ pk_command_notes() {
   esac
 }
 
+pk_print_examples() {
+  local -a pairs=("$@")
+  local width=0 i fmt
+  for ((i = 0; i < ${#pairs[@]}; i += 2)); do
+    (( ${#pairs[i]} > width )) && width=${#pairs[i]}
+  done
+  width=$(( width + 2 - width % 2 ))
+  fmt="  %-${width}s# %s\n"
+  for ((i = 0; i < ${#pairs[@]}; i += 2)); do
+    printf "$fmt" "${pairs[i]}" "${pairs[i + 1]}"
+  done
+}
+
 pk_help_overview() {
-  local self name
+  local self group cmd short also summary last=""
   self="$(pk_self)"
-  cat <<EOF
+  cat <<EOF2
 ${PK_BOLD}pk${PK_RESET} - ${PK_PROJECT} project workflows without typing Conan or CMake
 
 usage: ${self} <command> [TYPE] [flag...] [-- passthrough]
+EOF2
+  while IFS='|' read -r group cmd short also summary; do
+    [[ -n "$cmd" ]] || continue
+    if [[ "$group" != "$last" ]]; then
+      printf '\n%s%s%s\n' "$PK_BOLD" "$group" "$PK_RESET"
+      last="$group"
+    fi
+    printf '  %-12s%-6s%s\n' "$cmd" "$short" "$summary"
+  done <<< "$PK_COMMAND_TABLE"
+  cat <<EOF2
 
-EOF
-  printf '%scommands%s\n' "$PK_BOLD" "$PK_RESET"
-  for name in $PK_COMMANDS; do
-    printf '  %-11s %s\n' "$name" "$(pk_command_summary "$name")"
-  done
-  cat <<EOF
-
-${PK_BOLD}build types${PK_RESET} (a bare word anywhere, or -t TYPE)
+${PK_BOLD}build types${PK_RESET} (a bare word anywhere, or -t TYPE; default: ${PK_DEFAULT_TYPE})
   debug (d)  release (r)  relwithdebinfo (rwd)  minsizerel (msr)
-  default: ${PK_DEFAULT_TYPE}
 
-${PK_BOLD}shortcuts${PK_RESET}
-  b=build r=run t=test c=configure i=install st=status ls=list fmt=format,
-  and any unambiguous prefix: '${self} conf' is configure
+Any unambiguous prefix also works: '${self} san' is sanitize.
 
 ${PK_BOLD}examples${PK_RESET}
-EOF
-  printf '  %-44s %s\n' \
-    "${self} build" "first run installs deps and configures" \
-    "${self} run" "build and start the app" \
-    "${self} test release" "Release build with tests, then ctest" \
+EOF2
+  pk_print_examples \
+    "${self} build"                    "first run installs deps and configures" \
+    "${self} run"                      "build and start the app" \
+    "${self} test release"             "Release build with tests, then ctest" \
     "${self} build --werror --lib=both" "options are remembered per build tree" \
-    "${self} status" "what is configured and how" \
-    "${self} help build" "every flag 'build' accepts"
-  printf '\nEvery command prints the Conan/CMake commands it runs; add -n to only print.\n'
+    "${self} status"                   "what is configured and how" \
+    "${self} help build"               "every flag 'build' accepts"
+  printf '\nEvery command prints the Conan/CMake commands it runs; -n only prints them.\n'
   return 0
 }
 
