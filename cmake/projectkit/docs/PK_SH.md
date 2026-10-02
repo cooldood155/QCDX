@@ -45,6 +45,7 @@ type pk
 | `test`      | turn tests on, build, run ctest (`-R`, `-L`, args after `--`)   |
 | `configure` | deps, then always reconfigure (args after `--` go to CMake)     |
 | `deps`      | Conan install for one build type (args after `--` go to Conan)  |
+| `dep`       | manage `deps.json` and `conan.lock`, see `PK_DEP.md`            |
 | `install`   | build, then `cmake --install` into `stage/` or `--prefix`       |
 | `stage`     | fresh install into `stage/`, checked like verify, with a report |
 | `rebuild`   | delete the build tree, then build                               |
@@ -73,11 +74,11 @@ Build types are `debug` (`d`), `release` (`r`), `relwithdebinfo` (`rwd`) and
 ## What pk decides for you
 
 **Dependencies.** After each install pk writes `build/<Type>/pk-deps.stamp`
-with a checksum of `conanfile.py` and the profiles used. Conan runs again only
-when that checksum changes, the toolchain is missing, `--update` is given, or
-the tests need Catch2 and the last install skipped it. Without tests pk passes
-`tools.build:skip_test=True` and `tools.graph:skip_test=True`, so Catch2 is
-neither downloaded nor built.
+with a checksum of `conanfile.py`, `deps.json`, `conan.lock` and the profiles
+used. Conan runs again only when that checksum changes, the toolchain is
+missing, `--update` is given, or the tests need Catch2 and the last install
+skipped it. Without tests pk passes `tools.build:skip_test=True` and
+`tools.graph:skip_test=True`, so Catch2 is neither downloaded nor built.
 
 **Configure.** CMake is configured only when the tree is new, its last
 configure did not finish, the dependencies were reinstalled, `--reset` is

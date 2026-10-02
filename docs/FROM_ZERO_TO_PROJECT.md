@@ -195,11 +195,24 @@ than one executable, with `OUTPUT_NAME` matched to it one for one.
 Sources in `tests/<project>/`, and in `tests/CMakeLists.txt`:
 
 ```cmake
-find_package(Catch2 3 REQUIRED)
+pk_deps_find(catch2)
 include(Catch)
 
 pk_create_test(NAME myproject)
 ```
+
+Catch2 comes from `deps.json`, just as all third-party package do. To use
+another one, declare it and use it:
+
+```bash
+./scripts/pk.sh dep add "sqlite3/[>=3.45 <4]"
+```
+
+```cmake
+pk_create_library(NAME myproject ... DEPS_PRIVATE sqlite3)
+```
+
+`cmake/projectkit/docs/PK_DEP.md` covers versions, locking and reports.
 
 The creator builds one test executable per library variant, so a
 `STATIC+SHARED` build tests both.
