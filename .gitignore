@@ -147,6 +147,9 @@ core.*
 asan.log.*
 ubsan.log.*
 
+# Python Cache
+__pycache__/
+
 # ==========================================
 # In-Project Deamed Personal Directories
 # ==========================================
