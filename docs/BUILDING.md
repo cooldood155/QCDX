@@ -1,6 +1,6 @@
 # Local and Cross-Platform Building Workflows
 
-This project can be build natively or cross-compiled, subject to the
+This project can be built natively or cross-compiled, subject to the
 constraints below.
 
 ## Native Build Support
@@ -24,8 +24,8 @@ able to build this project:
 | Windows | `x86_64` | MSYS2 CLANG64 (Clang 18+) | MinGW | UCRT | compiler-rt + libunwind | libc++ | None |
 | Windows | `arm64` | MSYS2 CLANGARM64 (Clang 18+) | MinGW | UCRT | compiler-rt + libunwind | libc++ | None |
 
-Static analysis (`clang-tidy`, `cppcheck`) and coverage instrumentation is
-available for row from the table above.
+Static analysis (`clang-tidy`, `cppcheck`) and coverage instrumentation are
+available for every row of the table above.
 
 **32-bit targets** are unsupported.
 
@@ -39,10 +39,10 @@ x86_64, but adds nothing not covered by GCC and Clang.
 **Windows:**
 
 - `MinGW` is the only ABI this project supports that does **not** have built-in
-  sanitizers..
-- `MSVC` and `MSYS2` (toolchains) do **not** produce interchangeble object
+  sanitizers.
+- `MSVC` and `MSYS2` (toolchains) do **not** produce interchangeable object
   files, static libraries or import libraries; artifacts built by MSVC are
-  **not** compatible with MSYS2— and vise versa.
+  **not** compatible with MSYS2, and vice versa.
 
 **MSYS2** `MINGW64` is **unsupported.** It links `msvcrt.dll`, which has weak
 C99 conformance. Use `UCRT64` for GCC or `CLANG64` for Clang.
@@ -51,9 +51,9 @@ C99 conformance. Use `UCRT64` for GCC or `CLANG64` for Clang.
 shell and builds binaries depending on `msys-2.0.dll` and are **not native**
 Windows programs.
 
-## Cross-Compiation Support
+## Cross-Compilation Support
 
-A **cross-build** is one where the build systems outputted binaries are
+A **cross-build** is one where the build system's output binaries are
 expected to be consumed on a different system.
 
 These toolchain families provide different *mechanisms* for cross-compiling:
@@ -91,14 +91,15 @@ binaries need to run on.
 Historically, this identifier was called a **target triple** because it
 featured only three parts: `[Architecture]-[OS]-[Language/Runtime Environment]`.
 
-As systems grew more complex, a fourth field was intorduced placed after the
-OS, the **Vendor** field. Most modern compilers now read a ***quadruple***:
-`[Architecture]-[OS]-[Language/Runtime Environment]-[Vendor]`.
+As systems grew more complex, a fourth field was introduced, placed after the
+architecture: the **Vendor** field. Most modern compilers now read a
+***quadruple***: `[Architecture]-[Vendor]-[OS]-[Language/Runtime Environment]`,
+as in `x86_64-unknown-linux-gnu`.
 
 No matter the number of elements within a "target triple", it is **always**
 referred to as a **triple**
 
-- The **Clang quadruple** and **GNU tirple** columns just provide different
+- The **Clang quadruple** and **GNU triple** columns just provide different
   *spellings* for the same target; GNU expects three elements while Clang
   expects four.
 
@@ -111,21 +112,21 @@ runs both, only when needed; the manual commands below are what it runs.
 ### Native builds
 
 ```bash
-./scripts/pk.sh build release
-./scripts/pk.sh test release
+./scripts/pk.py build release
+./scripts/pk.py test release
 ```
 
 By hand, where `<Type>` is `Debug`, `Release`, `RelWithDebInfo` or
 `MinSizeRel` and the preset uses its lowercase form:
 
 ```bash
-./scripts/package.sh install --build_type=Release
+./scripts/package.py install --build_type=Release
 cmake --preset native-release
 cmake --build build/native-release
 ctest --test-dir build/native-release --output-on-failure
 ```
 
-`package.sh install` runs `conan install` with `profiles/native` and writes
+`package.py install` runs `conan install` with `profiles/native` and writes
 the toolchain to `build/Release/generators/`, which the `native-*` presets
 read. By hand the tests are built by default, because `profiles/native` keeps
 them on; `pk` leaves them off until `pk test` or `--tests` asks for them.
@@ -137,20 +138,20 @@ Each cross target is a Conan profile in `profiles/` with matching
 toolchain is installed:
 
 ```bash
-./scripts/pk.sh list
-./scripts/pk.sh build release -x x86_64-mingw-w64
+./scripts/pk.py list
+./scripts/pk.py build release -x x86_64-mingw-w64
 ```
 
 By hand, the code generation tools are built natively first, in the same build
 type, then the cross build uses them:
 
 ```bash
-./scripts/package.sh install --build_type=Release
+./scripts/package.py install --build_type=Release
 cmake --preset host-tools -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_TOOLCHAIN_FILE="$PWD/build/Release/generators/conan_toolchain.cmake"
 cmake --build build/host-tools
 
-./scripts/package.sh install --build_type=Release \
+./scripts/package.py install --build_type=Release \
   --profile=native --host-profile=x86_64-mingw-w64
 cmake --preset x86_64-mingw-w64-release
 cmake --build build/x86_64-mingw-w64-release
@@ -196,7 +197,7 @@ that your toolchain may be causing.
 | Disassembly | `objdump` | `llvm-objdump` | `dumpbin /disasm` |
 | Dependency listing | `ldd` | `llvm-readelf -d` | `dumpbin /dependents` |
 
-Wehn cross-compiling with GNU toolchains, every one of these has a
+When cross-compiling with GNU toolchains, every one of these has a
 **triple-prefixed** form (e.g., `aarch64-linux-gnu-objcopy`) and the unprefixed
 *host* version **cannot** be used on target binaries. LLVM tools are
 target-agnostic and need no prefix.
@@ -214,7 +215,7 @@ What **must** reside alongside produced binaries, when *not statically linked*:
 | Windows MinGW (Clang) | `libc++.dll`, `libunwind.dll`, `libwinpthread-1.dll` |
 
 MinGW binaries that run inside an MSYS2 shell but fail when launched from
-Windows Explorer are almost always missing thes DLLs on `PATH`. They can be
+Windows Explorer are almost always missing these DLLs on `PATH`. They can be
 statically linked using the following flags:
 
 ```plaintext

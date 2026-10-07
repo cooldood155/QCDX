@@ -157,5 +157,5 @@ __pycache__/
 docs/archive
 docs/notes
 
-# ProjectKit install staging (pk stage, pk install, verify.sh)
+# ProjectKit install staging (pk stage, pk install, verify.py)
 stage/

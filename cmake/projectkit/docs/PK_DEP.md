@@ -13,7 +13,7 @@ needs to know about them (the readers) reads it:
 
 Versions are pinned in `conan.lock` (also at the root), and both files get
 committed. Conan picks up a `conan.lock` sitting next to the conanfile on its
-own, which means `pk build`, `scripts/package.sh`, `scripts/verify.sh` and CI
+own, which means `pk build`, `scripts/package.py`, `scripts/verify.py` and CI
 all build the pinned versions **exactly**. An install whose graph doesn't
 match the lock just fails.
 
@@ -44,9 +44,9 @@ each other or keeps versions pinned, and sooner or later they drift.
 - **Only *you* change versions.** The lock pins every package (transitive ones
   too) by version and recipe revision. Commands that aren't about versions keep
   the pins; see [What can change a version](#what-can-change-a-version).
-- **Python, not bash.** `pk dep` has to edit JSON transactionally, and since
-  Conan already needs Python it adds nothing new to install (standard library
-  only, Python 3.8+).
+- **Python.** `pk dep` has to edit JSON transactionally, and since Conan
+  already needs Python it adds nothing new to install (standard library only,
+  Python 3.8+). The rest of `pk` is Python for the same reason.
 
 ## deps.json
 
@@ -208,7 +208,7 @@ Build and test after an update (`pk test`), then commit `conan.lock`.
 
 | Action | Versions |
 | :-- | :-- |
-| `pk build`, `pk test`, `package.sh`, CI | never; the lock is enforced |
+| `pk build`, `pk test`, `package.py`, CI | never; the lock is enforced |
 | `pk dep lock` | adds entries for packages not locked yet; existing pins stay |
 | `pk dep add` | resolves the new package (newest in range); other pins stay |
 | `pk dep set --option/--trait/--notes` | never; a relock only adds what an option newly pulls in |

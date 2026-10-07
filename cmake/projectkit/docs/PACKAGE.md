@@ -1,13 +1,13 @@
-# package.sh
+# package.py
 
 The Conan 2 lifecycle for a ProjectKit project: create, inspect, edit, delete,
 publish. The recipe is the single source of truth. Name and version come from
 `conan inspect`, so nothing in the script is tied to a project.
 
 ```text
-cmake/projectkit/scripts/package.sh       entry point, kit side
+cmake/projectkit/scripts/package.py       entry point, kit side
 cmake/projectkit/test_package/            generic test package
-scripts/package.sh                        wrapper, project side
+scripts/package.py                        wrapper, project side
 scripts/helpers/package/package.conf      project settings
 ```
 
@@ -26,22 +26,22 @@ Conan does not use the CRUD names, so here is the mapping.
 ## 2. Commands
 
 ```bash
-./scripts/package.sh reference
-./scripts/package.sh install --build_type=Debug
-./scripts/package.sh create --build_type=Debug,Release
-./scripts/package.sh build
-./scripts/package.sh export
-./scripts/package.sh export-pkg
-./scripts/package.sh list
-./scripts/package.sh info
-./scripts/package.sh path
-./scripts/package.sh editable add
-./scripts/package.sh editable remove
-./scripts/package.sh editable list
-./scripts/package.sh remove --yes
-./scripts/package.sh upload --remote=myremote
-./scripts/package.sh cache-clean
-./scripts/package.sh help
+./scripts/package.py reference
+./scripts/package.py install --build_type=Debug
+./scripts/package.py create --build_type=Debug,Release
+./scripts/package.py build
+./scripts/package.py export
+./scripts/package.py export-pkg
+./scripts/package.py list
+./scripts/package.py info
+./scripts/package.py path
+./scripts/package.py editable add
+./scripts/package.py editable remove
+./scripts/package.py editable list
+./scripts/package.py remove --yes
+./scripts/package.py upload --remote=myremote
+./scripts/package.py cache-clean
+./scripts/package.py help
 ```
 
 | command | conan command | purpose |
@@ -77,9 +77,9 @@ Conan does not use the CRUD names, so here is the mapping.
 Passthrough covers anything the script does not wrap:
 
 ```bash
-./scripts/package.sh create -- -o shared=True
-./scripts/package.sh create -- -c tools.build:skip_test=True
-./scripts/package.sh list -- --format=json
+./scripts/package.py create -- -o shared=True
+./scripts/package.py create -- -c tools.build:skip_test=True
+./scripts/package.py list -- --format=json
 ```
 
 Every command prints the exact `conan` invocation before running it, prefixed
@@ -108,7 +108,7 @@ written any profiles, and an established project picks up its own automatically.
 Cross packaging:
 
 ```bash
-./scripts/package.sh create --profile=native --host-profile=x86_64-mingw-w64
+./scripts/package.py create --profile=native --host-profile=x86_64-mingw-w64
 ```
 
 ## 6. The test package
@@ -178,7 +178,7 @@ PK_TEST_SOURCE="${PK_REPO_ROOT}/scripts/helpers/verify/consumer.cpp"
 Day to day development, where the package never enters the cache:
 
 ```bash
-./scripts/package.sh install --build_type=Debug
+./scripts/package.py install --build_type=Debug
 cmake --preset native-debug
 cmake --build build/native-debug
 ```
@@ -186,8 +186,8 @@ cmake --build build/native-debug
 Before publishing, or before another project consumes it:
 
 ```bash
-./scripts/package.sh create --build_type=Debug,Release
-./scripts/package.sh list
+./scripts/package.py create --build_type=Debug,Release
+./scripts/package.py list
 ```
 
 Developing two projects together, so the consumer picks up your edits with no
@@ -195,28 +195,28 @@ packaging step at all:
 
 ```bash
 cd /k/Practice/etesca
-./scripts/package.sh editable add
+./scripts/package.py editable add
 
 cd /k/Practice/consumer-project
-./scripts/package.sh install --build_type=Debug
+./scripts/package.py install --build_type=Debug
 
 cd /k/Practice/etesca
-./scripts/package.sh editable remove
+./scripts/package.py editable remove
 ```
 
 Publishing, then cleaning up:
 
 ```bash
-./scripts/package.sh create --build_type=Release
-./scripts/package.sh upload --remote=myremote
-./scripts/package.sh cache-clean
+./scripts/package.py create --build_type=Release
+./scripts/package.py upload --remote=myremote
+./scripts/package.py cache-clean
 ```
 
 Starting over after a recipe change that Conan will not notice on its own:
 
 ```bash
-./scripts/package.sh remove --yes
-./scripts/package.sh create
+./scripts/package.py remove --yes
+./scripts/package.py create
 ```
 
 ## 9. Notes on the recipe

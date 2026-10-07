@@ -9,7 +9,7 @@ template: https://github.com/cooldood155/QCDX
 ```
 
 The template carries ProjectKit under `cmake/projectkit/`, the driver scripts
-(`pk.sh`, `verify.sh`, `package.sh`, `bootstrap.sh`), CMake presets, Conan
+(`pk.py`, `verify.py`, `package.py`, `bootstrap.py`), CMake presets, Conan
 profiles, and a tiny working library, app, test and tool so that a fresh clone
 builds before you have written a line of code.
 Where this guide uses `qcdx` as the template's own project name, substitute
@@ -30,10 +30,13 @@ pip install --user conan
 conan --version
 ```
 
-Everything below runs in the UCRT64 shell. The shell you open decides
-`MSYSTEM`, which decides which toolchain is on PATH, which is why the verify
-script refuses to build a CLANG64 target from a UCRT64 shell rather than
-producing a broken binary.
+The commands below are written for the UCRT64 shell. The scripts are Python
+and also run from PowerShell, cmd or Git Bash once `C:\msys64\ucrt64\bin` is
+on PATH; start them there as `python scripts\pk.py ...`. The toolchain is
+whichever compiler PATH finds first. The verify script reads the MSYS2
+environment from that compiler's location and refuses to build a CLANG64
+target unless CLANG64's `clang` comes first, rather than producing a broken
+binary.
 
 ### 1.2 Linux or macOS
 
@@ -91,13 +94,13 @@ git commit -m "start from QCDX template"
 
 ```bash
 git add -A && git commit -m "start from QCDX template"
-./scripts/bootstrap.sh myproject \
+./scripts/bootstrap.py myproject \
   --description="What this project is" \
   --version=0.1.0
 git diff --stat
 ```
 
-`./scripts/pk.sh rename` runs the same script with the same arguments.
+`./scripts/pk.py rename` runs the same script with the same arguments.
 
 The script renames directories, file names and file contents, and refuses to
 run on a dirty tree so that `git diff` is a usable review. Add `--dry-run`
@@ -110,22 +113,22 @@ Then check `conanfile.py` for `url` and `package_info`, and rewrite
 ## 4. First build
 
 ```bash
-./scripts/pk.sh doctor
-./scripts/pk.sh build
-./scripts/pk.sh test
+./scripts/pk.py doctor
+./scripts/pk.py build
+./scripts/pk.py test
 ```
 
 `doctor` checks the required and optional tools and the Conan profile.
 `build` installs the Conan dependencies, configures and builds, each only when
 needed, and prints every command before running it. `test` turns the tests on
 in the tree, installs Catch2 if the last dependency install skipped it, builds
-and runs ctest. To type `pk` instead of `./scripts/pk.sh`, install the shell
-function described in `PK_SH.md`.
+and runs ctest. To type `pk` instead of `./scripts/pk.py`, install the shell
+function for bash or PowerShell described in `PK.md`.
 
 `pk` decides which of these steps are needed; they can always be run by hand:
 
 ```bash
-./scripts/package.sh install --build_type=Debug
+./scripts/package.py install --build_type=Debug
 cmake --preset native-debug
 cmake --build build/native-debug
 ctest --test-dir build/native-debug --output-on-failure
@@ -133,7 +136,7 @@ ctest --test-dir build/native-debug --output-on-failure
 
 What each step is for:
 
-`package.sh install` runs `conan install`, which writes
+`package.py install` runs `conan install`, which writes
 `build/Debug/generators/conan_toolchain.cmake` plus the dependency data files.
 The presets point at that toolchain, so this must happen first.
 
@@ -205,7 +208,7 @@ Catch2 comes from `deps.json`, just as all third-party package do. To use
 another one, declare it and use it:
 
 ```bash
-./scripts/pk.sh dep add "sqlite3/[>=3.45 <4]"
+./scripts/pk.py dep add "sqlite3/[>=3.45 <4]"
 ```
 
 ```cmake
@@ -235,14 +238,14 @@ first and point `<project>HostTools_DIR` at its binary directory, which is what
 ## 6. Verify
 
 ```bash
-./scripts/verify.sh list
-./scripts/verify.sh run --build_type=Debug
-./scripts/verify.sh run --build_type=Debug,Release,RelWithDebInfo,MinSizeRel
+./scripts/verify.py list
+./scripts/verify.py run --build_type=Debug
+./scripts/verify.py run --build_type=Debug,Release,RelWithDebInfo,MinSizeRel
 ```
 
 This runs the full pipeline per build type: workflow, library type matrix,
 auto-discovery probe, install, a consumer project that only sees installed
-files, CPack, and host tools. Full detail in `VERIFY_SH.md`.
+files, CPack, and host tools. Full detail in `VERIFY.md`.
 
 Use `--keep` while debugging so the reset stage does not delete the build tree
 you are inspecting.
@@ -252,18 +255,18 @@ install and consumer stages against it and writes every result to
 `stage/pk-stage.txt`:
 
 ```bash
-./scripts/pk.sh stage
+./scripts/pk.py stage
 ```
 
 ## 7. Package
 
 ```bash
-./scripts/package.sh create --build_type=Debug,Release
-./scripts/package.sh list
+./scripts/package.py create --build_type=Debug,Release
+./scripts/package.py list
 ```
 
 `create` builds, packages, and then builds a small consumer against the
-packaged result. Full detail in `PACKAGE_SH.md`.
+packaged result. Full detail in `PACKAGE.md`.
 
 ## 8. Consume it from another project
 
@@ -285,10 +288,10 @@ While developing both at once, skip packaging entirely:
 
 ```bash
 cd /k/Practice/myproject
-./scripts/package.sh editable add
+./scripts/package.py editable add
 
 cd /k/Practice/other-project
-./scripts/package.sh install --build_type=Debug
+./scripts/package.py install --build_type=Debug
 ```
 
 Remember that consumers resolve an editable at graph time, so re-run `install`
@@ -300,14 +303,14 @@ Each cross target needs three things, named after one triple:
 
 1. A Conan profile at `profiles/<triple>`.
 2. Configure presets named `<triple>-debug`, `<triple>-release` and so on.
-3. A record in `cmake/projectkit/scripts/helpers/verify/targets.sh`.
+3. A record in `RECORDS` in `cmake/projectkit/scripts/pklib/targets.py`.
 
 Then:
 
 ```bash
-./scripts/verify.sh list-possible
-./scripts/verify.sh run --cross
-./scripts/package.sh create --profile=native --host-profile=x86_64-mingw-w64
+./scripts/verify.py list-possible
+./scripts/verify.py run --cross
+./scripts/package.py create --profile=native --host-profile=x86_64-mingw-w64
 ```
 
 Cross presets keep Conan output in a per-triple directory rather than
@@ -318,8 +321,8 @@ that layout work.
 ## 10. Static analysis
 
 ```bash
-./scripts/pk.sh analyze
-./scripts/pk.sh analyze -O SA_OUTPUT=files
+./scripts/pk.py analyze
+./scripts/pk.py analyze -O SA_OUTPUT=files
 ```
 
 `analyze` builds in its own tree, `build/native-debug-analyze`, so the normal
@@ -332,7 +335,7 @@ cmake --preset native-debug -DMYPROJECT_SA_ALL=ON -DMYPROJECT_SA_OUTPUT=files
 ```
 
 Reports then land under `build/native-debug/analysis/`. Full detail in
-`ANALYSER_LAUNCHER_SH.md`.
+`ANALYSER_LAUNCHER.md`.
 
 ## 11. Updating ProjectKit later
 
@@ -340,13 +343,13 @@ The kit is vendored: every project keeps its own copy under
 `cmake/projectkit/`. `sync` brings the template's later changes into it:
 
 ```bash
-./scripts/pk.sh sync -n
-./scripts/pk.sh sync
+./scripts/pk.py sync -n
+./scripts/pk.py sync
 ```
 
 The template is fetched from GitHub, and only its changes since the last sync
-are applied, as a 3-way merge, to `cmake/projectkit` and the `pk.sh`,
-`verify.sh` and `package.sh` wrappers. Changes you made to the kit in this
+are applied, as a 3-way merge, to `cmake/projectkit` and the `pk.py`,
+`verify.py`, `package.py` and `bootstrap.py` wrappers. Changes you made to the kit in this
 project are kept; where both sides changed the same lines you get conflict
 markers to resolve, and `git reset --merge` undoes the whole sync. The result
 is one commit, together with `scripts/helpers/pk/upstream.conf`, which records
@@ -360,7 +363,7 @@ Do not update by deleting `cmake/projectkit` and copying the template's over
 it: that silently throws away every change made to the kit in this project.
 
 A fork of the template sets `PK_UPSTREAM_URL` in `scripts/helpers/pk/pk.conf`.
-Full detail in `PK_SH.md`.
+Full detail in `PK.md`.
 
 If you would rather pin the kit as a git submodule, `pk sync` does not apply;
 updates are then `git submodule update --remote`:
@@ -373,8 +376,8 @@ git submodule add https://github.com/cooldood155/QCDX.git extern/qcdx
 ```
 
 Either way, the only project-side references to the kit are the
-`CMAKE_MODULE_PATH` line in the top-level `CMakeLists.txt` and the `exec` line
-in each wrapper script under `scripts/`.
+`CMAKE_MODULE_PATH` line in the top-level `CMakeLists.txt` and the `sys.path`
+line in each wrapper script under `scripts/`.
 
 ## 12. Layout reference
 
@@ -386,15 +389,11 @@ my-project/
   cmake/
     <project>Config.cmake.in      package config, overrides the kit template
     projectkit/                   the kit, updated with pk sync
-      docs/                       PK_SH, VERIFY_SH, PACKAGE_SH, ANALYSER_LAUNCHER_SH
+      docs/                       PK, PK_DEP, VERIFY, PACKAGE, ANALYSER_LAUNCHER
       scripts/
-        pk.sh
-        verify.sh
-        package.sh
-        bootstrap.sh
-        analyser-launcher.sh
-        helpers/verify/{verify_base.sh,targets.sh}
-        helpers/pk/presets.cmake
+        analyser_launcher.py      clang-tidy and cppcheck launcher
+        pklib/                    pk, verify, package, bootstrap, shared code
+        helpers/pk/{deps.py,presets.cmake}
       templates/
       test_package/
     toolchains/                   cross toolchain files
@@ -405,10 +404,10 @@ my-project/
   tests/<project>/                test sources
   tools/                          build-machine tools
   scripts/
-    pk.sh                         wrapper, sets PK_REPO_ROOT
-    verify.sh                     wrapper, sets PK_REPO_ROOT
-    package.sh                    wrapper, sets PK_REPO_ROOT
-    bootstrap.sh                  wrapper, in the template only
+    pk.py                         wrapper, runs pklib with this repo as root
+    verify.py                     wrapper, runs pklib with this repo as root
+    package.py                    wrapper, runs pklib with this repo as root
+    bootstrap.py                  wrapper, runs pklib with this repo as root
     helpers/verify/{verify.conf,consumer.cpp}
     helpers/package/package.conf
     helpers/pk/pk.conf            optional pk settings
@@ -421,14 +420,14 @@ my-project/
 ```text
 [ ] conan profile detect --force
 [ ] rename done and the diff reviewed
-[ ] ./scripts/package.sh reference prints <project>/<version>
-[ ] ./scripts/pk.sh doctor
-[ ] ./scripts/pk.sh build
-[ ] ./scripts/pk.sh test
-[ ] ./scripts/verify.sh run --build_type=Debug
-[ ] ./scripts/package.sh create
+[ ] ./scripts/package.py reference prints <project>/<version>
+[ ] ./scripts/pk.py doctor
+[ ] ./scripts/pk.py build
+[ ] ./scripts/pk.py test
+[ ] ./scripts/verify.py run --build_type=Debug
+[ ] ./scripts/package.py create
 [ ] git commit
-[ ] ./scripts/pk.sh sync (records the template commit the kit came from)
+[ ] ./scripts/pk.py sync (records the template commit the kit came from)
 ```
 
 ## 14. Troubleshooting the first hour
@@ -436,7 +435,7 @@ my-project/
 | symptom | cause |
 | ------------------------------------------------------------ | ----- |
 | `A build type must be specified` | Configured without a preset. Use `cmake --preset native-debug`. |
-| `Conan has not generated dependencies for Debug yet` | `package.sh install --build_type=Debug` has not been run for this build type. `pk build` runs it when needed. |
+| `Conan has not generated dependencies for Debug yet` | `package.py install --build_type=Debug` has not been run for this build type. `pk build` runs it when needed. |
 | `is not the Conan output for that build type` | The preset's toolchain belongs to another build type. Use the matching preset, or pass `-DCMAKE_TOOLCHAIN_FILE` explicitly. |
 | `no sources found for '<project>'` | Sources are not under `src/<project>/`, or the rename left a directory behind. |
 | Shared build links but the consumer sees undefined symbols | Public headers are missing the `<PROJECT>_EXPORT` macro. |

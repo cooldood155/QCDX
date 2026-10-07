@@ -1,26 +1,26 @@
-# pk.sh
+# pk.py
 
 One command line for every day-to-day workflow of a projectkit'd project. `pk`
 decides which Conan and CMake steps a request needs, runs only those, and
 prints every command before it runs it.
 
 ```bash
-./scripts/pk.sh build            # deps + configure + build, Debug
-./scripts/pk.sh run -- --help    # build the app and run it
-./scripts/pk.sh test release     # Release, tests on, then ctest
-./scripts/pk.sh stage            # install into stage/, check it, write a report
-./scripts/pk.sh full-clean       # remove everything the project generated
-./scripts/pk.sh sync             # pull kit updates from the QCDX template
-./scripts/pk.sh help build       # every flag 'build' accepts
+./scripts/pk.py build            # deps + configure + build, Debug
+./scripts/pk.py run -- --help    # build the app and run it
+./scripts/pk.py test release     # Release, tests on, then ctest
+./scripts/pk.py stage            # install into stage/, check it, write a report
+./scripts/pk.py full-clean       # remove everything the project generated
+./scripts/pk.py sync             # pull kit updates from the QCDX template
+./scripts/pk.py help build       # every flag 'build' accepts
 ```
 
 ## Install as a shell command
 
 ```bash
-echo 'eval "$(/path/to/project/scripts/pk.sh shell-init)"' >> ~/.bashrc
+echo 'eval "$(/path/to/project/scripts/pk.py shell-init)"' >> ~/.bashrc
 ```
 
-This defines a `pk` function that runs the nearest `scripts/pk.sh` above the
+This defines a `pk` function that runs the nearest `scripts/pk.py` above the
 **current directory**, `pk build` then works anywhere inside the project, with
 tab completion for commands, flags, build types and app names.
 
@@ -30,7 +30,7 @@ script is located. Replace `$HOME` with any absolute prefix you wish:
 
 ```bash
 grep -n '.pk.bash' ~/.bashrc
-/path/to/project_or_global/scripts/pk.sh shell-init > "$HOME/.pk.bash"
+/path/to/project_or_global/scripts/pk.py shell-init > "$HOME/.pk.bash"
 printf '\n# ProjectKit pk command\n[ -f "$HOME/.pk.bash" ] && . "$HOME/.pk.bash"\n' >> "$HOME/.bashrc"
 source "$HOME/.bashrc"
 type pk
@@ -59,9 +59,9 @@ type pk
 | `list`      | build types, apps, cross targets and whether each is ready      |
 | `doctor`    | required and optional tools; `--fix` creates Conan's profile    |
 | `sync`      | update the kit from the QCDX template, as one commit            |
-| `verify`    | runs `scripts/verify.sh` with the given arguments               |
-| `package`   | runs `scripts/package.sh` with the given arguments              |
-| `rename`    | runs `scripts/bootstrap.sh` with the given arguments            |
+| `verify`    | runs `scripts/verify.py` with the given arguments               |
+| `package`   | runs `scripts/package.py` with the given arguments              |
+| `rename`    | runs `scripts/bootstrap.py` with the given arguments            |
 | `shell-init`| prints the `pk` function and completion for `~/.bashrc`         |
 
 Shortcuts: `b` build, `r` run, `t` test, `c` configure, `i` install, `st`
@@ -102,7 +102,7 @@ automatically so your normal tree keeps compiling quick.
 ## stage: a checked install you can parse
 
 `stage` builds the tree you work in (remembered options untouched), then runs
-the same checks as `verify.sh`'s install and consumer stages:
+the same checks as `verify.py`'s install and consumer stages:
 
 1. `stage/` is emptied and the tree is installed into it; every file is listed.
 2. The package files `pk_expected_install_files` names (Config, ConfigVersion,
@@ -140,14 +140,14 @@ emptying, no checks, any `--prefix`.
 - `build/` (every tree, variant, host-tools tree and Conan output)
 - `stage/` (or `PK_STAGE_DIR`), `_install/` and `compile_commands.json`
 - verify's scratch directory and its consumer project under `$TMPDIR`
-- `cmake/projectkit/test_package/build/` from `package.sh create`
+- `cmake/projectkit/test_package/build/` from `package.py create`
 - `.cache/clangd/` (clangd's index), `CMakeUserPresets.json`,
   `ConanPresets.json`, `.ninja_deps`, `.ninja_log`
 - other CMake build directories: `build-*`, `cmake-build-*`
 - sanitizer logs in the project root: `asan.log.*`, `ubsan.log.*`
 
 `--cache` also removes this package from the local Conan cache (what
-`package.sh create` put there). `-n` only lists, `-y` skips the question, and
+`package.py create` put there). `-n` only lists, `-y` skips the question, and
 without a terminal pk refuses to delete unless `-y` is given.
 
 The list is explicit on purpose. `git clean -X` would also delete ignored files
@@ -172,8 +172,8 @@ pk sync --from /k/Templates/QCDX # a local clone, including unpushed commits
    template commit whose kit is closest to this project's, and it lists the
    files that differ locally.
 3. Only the template's changes from that base to its newest commit, and only
-   in the synced paths (`cmake/projectkit`, `scripts/pk.sh`,
-   `scripts/verify.sh`, `scripts/package.sh`), are applied with
+   in the synced paths (`cmake/projectkit`, `scripts/pk.py`,
+   `scripts/verify.py`, `scripts/package.py`), are applied with
    `git apply --3way`. Changes made to the kit in this project are kept.
 4. The result is committed as `Sync projectkit from QCDX <commit>`, together
    with the updated `upstream.conf`. Your other uncommitted work is left
@@ -234,7 +234,7 @@ PK_NATIVE_PROFILE=native                 # profiles/<name> for native builds
 PK_FORMAT_EXCLUDE="cmake/projectkit/ build/ stage/ _install/"
 PK_UPSTREAM_URL=https://github.com/cooldood155/QCDX.git # sync's template
 PK_UPSTREAM_BRANCH=main
-PK_SYNC_PATHS="cmake/projectkit scripts/pk.sh scripts/verify.sh scripts/package.sh"
+PK_SYNC_PATHS="cmake/projectkit scripts/pk.py scripts/verify.py scripts/package.py"
 ```
 
 A fork of the template should set `PK_UPSTREAM_URL` to its own repository.
@@ -244,7 +244,7 @@ A fork of the template should set `PK_UPSTREAM_URL` to its own repository.
 ## Limits
 
 - Changes to `~/.conan2/profiles/default` are not tracked; use `--update`.
-- `build/host-tools` is one tree for every build type (following `verify.sh`),
+- `build/host-tools` is one tree for every build type (following `verify.py`),
   switching a cross build's type rebuilds it.
 - `compile_commands.json` follows the most recently configured tree, variant
   trees included.

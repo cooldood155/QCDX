@@ -110,12 +110,12 @@ jobs:
         if: matrix.target == 'linux-x86_64'
         env:
           CONAN_HOME: ${{ runner.temp }}/conan2
-        run: ./scripts/pk.sh dep check
+        run: ./scripts/pk.py dep check
 
       - name: Verify
         env:
           CONAN_HOME: ${{ runner.temp }}/conan2
-        run: ./scripts/verify.sh run ${{ matrix.target }}
+        run: ./scripts/verify.py run ${{ matrix.target }}
 
   windows:
     name: windows-ucrt64
@@ -167,4 +167,4 @@ jobs:
       - name: Verify
         env:
           CONAN_HOME: ${{ runner.temp }}/conan2
-        run: ./scripts/verify.sh run windows-ucrt64
+        run: ./scripts/verify.py run windows-ucrt64

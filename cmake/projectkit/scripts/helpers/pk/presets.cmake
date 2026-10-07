@@ -1,4 +1,4 @@
-# Answers queries about CMakePresets.json from pk.sh, the shell  is never
+# Answers queries about CMakePresets.json from pk.py, the shell  is never
 # required to parse JSON. Every result is printed as a "-- pk|<payload>" line.
 #
 #   cmake -DPK_QUERY=dirs -DPK_PRESET=native-debug -P presets.cmake

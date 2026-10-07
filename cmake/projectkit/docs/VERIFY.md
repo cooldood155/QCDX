@@ -1,4 +1,4 @@
-# verify.sh
+# verify.py
 
 Build verification for a ProjectKit project. It drives one or more *targets*
 (native or cross) through a fixed pipeline of *stages*, once per requested
@@ -9,10 +9,10 @@ from the top-level `project()` call; everything else is derived from it or set
 in a config file.
 
 ```text
-cmake/projectkit/scripts/verify.sh entry point, kit side
+cmake/projectkit/scripts/verify.py entry point, kit side
 cmake/projectkit/scripts/helpers/verify/verify_base.sh stages and defaults
 cmake/projectkit/scripts/helpers/verify/targets.sh target registry
-scripts/verify.sh wrapper, project side
+scripts/verify.py wrapper, project side
 scripts/helpers/verify/verify.conf project settings
 scripts/helpers/verify/consumer.cpp optional smoke test
 ```
@@ -20,12 +20,12 @@ scripts/helpers/verify/consumer.cpp optional smoke test
 ## 1. Commands
 
 ```bash
-./scripts/verify.sh list
-./scripts/verify.sh list-possible
-./scripts/verify.sh run
-./scripts/verify.sh run-possible
-./scripts/verify.sh clean
-./scripts/verify.sh help
+./scripts/verify.py list
+./scripts/verify.py list-possible
+./scripts/verify.py run
+./scripts/verify.py run-possible
+./scripts/verify.py clean
+./scripts/verify.py help
 ```
 
 | command | what it does |
@@ -61,16 +61,16 @@ A `;` list must be quoted, because an unquoted `;` ends the command in bash and
 the shell tries to run the second build type as a program. Commas avoid that:
 
 ```bash
-./scripts/verify.sh run --build_type=Debug,RelWithDebInfo
-./scripts/verify.sh run --build_type='Debug;RelWithDebInfo'
+./scripts/verify.py run --build_type=Debug,RelWithDebInfo
+./scripts/verify.py run --build_type='Debug;RelWithDebInfo'
 ```
 
 Naming one or more targets selects exactly those, ignores the kind filters, and
 runs them even when they are unavailable. The script prints a warning first:
 
 ```bash
-./scripts/verify.sh run windows-ucrt64
-./scripts/verify.sh run --build_type=MinSizeRel windows-ucrt64 cross-x86_64-mingw-w64
+./scripts/verify.py run windows-ucrt64
+./scripts/verify.py run --build_type=MinSizeRel windows-ucrt64 cross-x86_64-mingw-w64
 ```
 
 ## 3. Exit codes
@@ -175,7 +175,7 @@ Every setting is a plain shell variable, so anything in the config file can
 also be given on the command line as an environment variable:
 
 ```bash
-PK_BUILD_TYPES="Debug" ./scripts/verify.sh run linux-x86_64
+PK_BUILD_TYPES="Debug" ./scripts/verify.py run linux-x86_64
 ```
 
 ### 6.1 Identity
@@ -288,12 +288,12 @@ cross-riscv64-linux-gnu|cross|any|any|-|riscv64-linux-gnu-gcc|Cross to Linux ris
 ## 9. Typical sessions
 
 ```bash
-./scripts/verify.sh list
-./scripts/verify.sh run --build_type=Debug windows-ucrt64
-./scripts/verify.sh run --build_type=Debug,Release,RelWithDebInfo,MinSizeRel
-./scripts/verify.sh run --cross
-./scripts/verify.sh run --keep --build_type=Debug windows-ucrt64
-./scripts/verify.sh clean
+./scripts/verify.py list
+./scripts/verify.py run --build_type=Debug windows-ucrt64
+./scripts/verify.py run --build_type=Debug,Release,RelWithDebInfo,MinSizeRel
+./scripts/verify.py run --cross
+./scripts/verify.py run --keep --build_type=Debug windows-ucrt64
+./scripts/verify.py clean
 ```
 
 `--keep` is the one to use while debugging a failure, since the reset stage
@@ -305,7 +305,7 @@ would otherwise delete the build tree you want to inspect.
 | --------------------------------------------------------- | ----- |
 | `no targets selected` | No target matched the filters in this shell. Run `list` to see why each one was rejected, or `run-possible`. |
 | `needs MSYSTEM=CLANG64, this shell is UCRT64` | Expected. Open the CLANG64 shell; `MSYSTEM` cannot be reassigned, because PATH was set by the launcher. |
-| `Conan has not generated dependencies for X yet` | The build type was never installed. Run `./scripts/package.sh install --build_type=X`. |
+| `Conan has not generated dependencies for X yet` | The build type was never installed. Run `./scripts/package.py install --build_type=X`. |
 | `<PREFIX>_BUILD_TESTS=OFF` | `tools.build:skip_test` is set in your Conan profile, so the test stage would silently do nothing. |
 | `probe.cpp was not picked up` | `CONFIGURE_DEPENDS` is not working, or `PK_SCRATCH_DIR` points outside the globbed source directory. |
 | `cannot determine the project name` | No `project()` call found. Set `PK_PROJECT` in the config file. |

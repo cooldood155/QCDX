@@ -1,10 +1,10 @@
-# analyser-launcher.sh
+# analyser_launcher.py
 
 A wrapper that CMake runs in place of the static analyser, so findings land in
 a per-source report file as well as on the console.
 
 ```text
-cmake/projectkit/scripts/analyser-launcher.sh
+cmake/projectkit/scripts/analyser_launcher.py
 ```
 
 You never call this script yourself. `StaticAnalysis.cmake` prepends it to the
@@ -27,7 +27,7 @@ same console output, same exit code. Anything else would break
 ## 2. Contract
 
 ```text
-analyser-launcher.sh <report-dir> <analyser> [analyser args...]
+analyser_launcher.py <report-dir> <analyser> [analyser args...]
 ```
 
 | position | meaning |
@@ -137,7 +137,7 @@ failing later on the first compiled file.
 Useful when the wrapper itself is suspect:
 
 ```bash
-sh cmake/projectkit/scripts/analyser-launcher.sh /tmp/reports \
+sh cmake/projectkit/scripts/analyser_launcher.py /tmp/reports \
   clang-tidy src/etesca/core.cpp -- -std=c++23 -Iinclude
 echo "exit=$?"
 ls /tmp/reports

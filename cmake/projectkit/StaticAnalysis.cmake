@@ -33,9 +33,10 @@ function(pk_setup_static_analysis)
   set_property(CACHE ${prefix}_SA_MESSAGE_FORMAT
     PROPERTY STRINGS default gcc vs)
 
-  set(${prefix}_SA_LAUNCHER "${PK_MODULE_DIR}/scripts/analyser-launcher.sh"
-    CACHE FILEPATH
-    "Wrapper script used when ${prefix}_SA_OUTPUT is files")
+  find_package(Python3 3.8 REQUIRED COMPONENTS Interpreter)
+  set(${prefix}_SA_LAUNCHER "${Python3_EXECUTABLE};${PK_MODULE_DIR}/scripts/analyser_launcher.py"
+    CACHE STRING
+    "Wrapper command used when ${prefix}_SA_OUTPUT is files")
 
   if(NOT ${prefix}_SA_OUTPUT MATCHES "^(console|files)$")
     message(FATAL_ERROR
@@ -66,7 +67,8 @@ function(pk_setup_static_analysis)
     set(clang_tidy_command
       "${${prefix}_CLANG_TIDY_PATH}"
       "--extra-arg=-Wno-unknown-warning-option"
-      "--extra-arg=-Wno-unused-command-line-argument")
+      "--extra-arg=-Wno-unused-command-line-argument",
+      "--removed-arg=-fno-keep-inline-dllexport")
 
     if(${prefix}_SA_OUTPUT STREQUAL "files")
       find_program(${prefix}_SH_PATH NAMES sh REQUIRED)

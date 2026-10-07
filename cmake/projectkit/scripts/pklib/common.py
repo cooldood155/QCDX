@@ -1,0 +1,370 @@
+from __future__ import annotations
+
+import json
+import os
+import platform
+import re
+import shlex
+import shutil
+import stat
+import subprocess
+import sys
+from typing import Callable, Dict, Iterator, List, Optional, Tuple
+
+SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+KIT_DIR = os.path.dirname(SCRIPTS_DIR)
+BUILD_TYPES = ("Debug", "Release", "RelWithDebInfo", "MinSizeRel")
+
+
+class Colors:
+    def __init__(self) -> None:
+        self.bold = self.red = self.green = self.yellow = self.dim = self.reset = ""
+
+
+C = Colors()
+
+
+def _console_ansi() -> bool:
+    if sys.platform != "win32":
+        return True
+    try:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.GetStdHandle(-11)
+        mode = ctypes.c_uint32()
+        if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            return False
+        return bool(kernel32.SetConsoleMode(handle, mode.value | 0x0004))
+    except (AttributeError, OSError):
+        return False
+
+
+def setup_output() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(errors="replace")
+    if C.reset or os.environ.get("NO_COLOR") or not sys.stdout.isatty() or not _console_ansi():
+        return
+    C.bold, C.red, C.green, C.yellow, C.dim, C.reset = (
+        "\033[1m", "\033[31m", "\033[32m", "\033[33m", "\033[2m", "\033[0m")
+
+
+def out(text: str = "") -> None:
+    print(text)
+
+
+def err(text: str) -> None:
+    print(text, file=sys.stderr)
+
+
+def flush() -> None:
+    sys.stdout.flush()
+    sys.stderr.flush()
+
+
+def entry(function: Callable[[List[str], Optional[str]], int], argv: List[str], root: Optional[str]) -> int:
+    try:
+        return function(argv, root)
+    except KeyboardInterrupt:
+        return 130
+    except BrokenPipeError:
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        return 141
+
+
+def exit_code(stop: SystemExit) -> int:
+    if stop.code is None:
+        return 0
+    return stop.code if isinstance(stop.code, int) else 1
+
+
+_PLAIN = re.compile(r"[A-Za-z0-9_./:=,+@%\\ -]+")
+
+
+def shown(argv: List[str]) -> str:
+    parts = []
+    for arg in argv:
+        if arg == "":
+            parts.append("''")
+        elif not _PLAIN.fullmatch(arg):
+            parts.append(shlex.quote(arg))
+        elif " " in arg:
+            parts.append(f'"{arg}"')
+        else:
+            parts.append(arg)
+    return " ".join(parts)
+
+
+def _resolve(argv: List[str]) -> List[str]:
+    return [shutil.which(argv[0]) or argv[0], *argv[1:]]
+
+
+def run(argv: List[str], cwd: Optional[str] = None, env: Optional[Dict[str, str]] = None) -> int:
+    flush()
+    try:
+        return subprocess.run(_resolve(argv), cwd=cwd, env=env).returncode
+    except OSError as error:
+        err(f"{argv[0]}: {error.strerror or error}")
+        return 127
+
+
+def capture(argv: List[str], cwd: Optional[str] = None, merge: bool = False,
+            env: Optional[Dict[str, str]] = None) -> Tuple[int, str]:
+    flush()
+    try:
+        result = subprocess.run(_resolve(argv), cwd=cwd, env=env, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT if merge else subprocess.DEVNULL)
+    except OSError:
+        return 127, ""
+    return result.returncode, result.stdout.decode("utf-8", "replace")
+
+
+def output(argv: List[str], cwd: Optional[str] = None) -> str:
+    code, text = capture(argv, cwd=cwd)
+    return text.strip() if code == 0 else ""
+
+
+def lines(argv: List[str], cwd: Optional[str] = None) -> List[str]:
+    code, text = capture(argv, cwd=cwd)
+    return [line for line in text.splitlines() if line] if code == 0 else []
+
+
+def tee(argv: List[str], cwd: Optional[str] = None) -> Tuple[int, str]:
+    flush()
+    try:
+        process = subprocess.Popen(_resolve(argv), cwd=cwd, stdout=subprocess.PIPE,
+                                   stderr=subprocess.STDOUT)
+    except OSError as error:
+        err(f"{argv[0]}: {error.strerror or error}")
+        return 127, ""
+    sink = getattr(sys.stdout, "buffer", None)
+    pieces: List[bytes] = []
+    for line in process.stdout or ():
+        pieces.append(line)
+        if sink is not None:
+            sink.write(line)
+            sink.flush()
+        else:
+            sys.stdout.write(line.decode("utf-8", "replace"))
+    return process.wait(), b"".join(pieces).decode("utf-8", "replace")
+
+
+def have(tool: str) -> bool:
+    return shutil.which(tool) is not None
+
+
+def _retry_writable(function: Callable[[str], object], path: str, _info: object) -> None:
+    os.chmod(path, stat.S_IWRITE)
+    function(path)
+
+
+def remove(path: str) -> bool:
+    try:
+        if os.path.islink(path):
+            try:
+                os.remove(path)
+            except OSError:
+                os.rmdir(path)
+        elif os.path.isdir(path):
+            if sys.version_info >= (3, 12):
+                shutil.rmtree(path, onexc=_retry_writable)
+            else:
+                shutil.rmtree(path, onerror=_retry_writable)
+        elif os.path.exists(path):
+            os.remove(path)
+        return True
+    except OSError as error:
+        err(f"cannot remove {path}: {error.strerror or error}")
+        return False
+
+
+def walk_files(top: str) -> Iterator[str]:
+    for directory, _dirs, files in os.walk(top):
+        for name in files:
+            yield os.path.join(directory, name)
+
+
+def host_platform() -> str:
+    system = platform.system()
+    if system == "Linux":
+        return "linux"
+    if system == "Darwin":
+        return "macos"
+    if system == "Windows" or system.startswith(("MINGW", "MSYS", "CYGWIN")):
+        return "windows"
+    return "unknown"
+
+
+def host_arch() -> str:
+    machine = platform.machine().lower()
+    if machine in ("x86_64", "amd64"):
+        return "x86_64"
+    if machine in ("aarch64", "arm64") or machine.startswith("armv8"):
+        return "armv8"
+    return "unknown"
+
+
+def tool_env(tool: str) -> str:
+    found = shutil.which(tool)
+    if not found:
+        return ""
+    return os.path.basename(os.path.dirname(os.path.dirname(os.path.realpath(found)))).upper()
+
+
+def native_path(path: str) -> str:
+    if sys.platform in ("msys", "cygwin") and have("cygpath"):
+        return output(["cygpath", "-m", path]) or path
+    if os.name == "nt":
+        return path.replace("\\", "/")
+    return path
+
+
+def exe_suffix() -> str:
+    return ".exe" if host_platform() == "windows" else ""
+
+
+def repo_root(given: Optional[str], check: Callable[[str], bool], missing: str) -> str:
+    root = os.environ.get("PK_REPO_ROOT") or given
+    if not root:
+        directory = os.getcwd()
+        while not check(directory):
+            parent = os.path.dirname(directory)
+            if parent == directory:
+                err(missing.format(cwd=os.getcwd()))
+                raise SystemExit(2)
+            directory = parent
+        root = directory
+    root = os.path.abspath(root)
+    os.environ["PK_REPO_ROOT"] = root
+    return root
+
+
+def has_file(*names: str) -> Callable[[str], bool]:
+    return lambda directory: all(os.path.isfile(os.path.join(directory, n)) for n in names)
+
+
+_PROJECT = re.compile(r"^[ \t]*project[ \t]*\(\s*([A-Za-z0-9_.+-]+)", re.MULTILINE)
+
+
+def detect_project(root: str) -> str:
+    try:
+        with open(os.path.join(root, "CMakeLists.txt"), encoding="utf-8", errors="replace") as file:
+            match = _PROJECT.search(file.read())
+    except OSError:
+        return ""
+    return match.group(1) if match else ""
+
+
+def confirm(prompt: str, accept: Tuple[str, ...] = ("y",)) -> bool:
+    try:
+        answer = input(f"{prompt} [y/N] ")
+    except EOFError:
+        return False
+    return answer.strip().lower() in accept
+
+
+def script_env(script: str) -> Optional[Dict[str, str]]:
+    script = os.path.abspath(script)
+    try:
+        if script.endswith(".bat"):
+            command = f'cmd /d /u /s /c "call "{os.path.normpath(script)}" >nul 2>&1 && set"'
+            raw = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL).stdout
+            pairs = [line.split("=", 1) for line in raw.decode("utf-16-le", "replace").splitlines()
+                     if "=" in line and not line.startswith("=")]
+            return {name: value for name, value in pairs}
+        if not have("sh"):
+            return None
+        code = "import json, os; print(json.dumps(dict(os.environ)))"
+        result = subprocess.run(
+            ["sh", "-c", '. "$1" >/dev/null 2>&1 && exec "$2" -c "$3"', "sh", script, sys.executable, code],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        data = json.loads(result.stdout.decode("utf-8", "replace"))
+        return data if isinstance(data, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+_ASSIGN = re.compile(r"(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)", re.DOTALL)
+_DEFAULT = re.compile(r':[ \t]+"\$\{([A-Za-z_][A-Za-z0-9_]*):=(.*)\}"', re.DOTALL)
+_VARIABLE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}|\$([A-Za-z_][A-Za-z0-9_]*)")
+
+
+class Config:
+    def __init__(self, extra: Optional[Dict[str, str]] = None) -> None:
+        self.values: Dict[str, str] = {}
+        self.extra = extra or {}
+
+    def load(self, path: str) -> "Config":
+        if not os.path.isfile(path):
+            return self
+        with open(path, encoding="utf-8", errors="replace") as file:
+            raw_lines = file.read().splitlines()
+        index = 0
+        while index < len(raw_lines):
+            number = index + 1
+            line = raw_lines[index].strip()
+            index += 1
+            while (line.count('"') - line.count('\\"')) % 2 and index < len(raw_lines):
+                line += "\n" + raw_lines[index]
+                index += 1
+            if not line or line.startswith("#"):
+                continue
+            match = _DEFAULT.fullmatch(line)
+            if match:
+                if not self.lookup(match.group(1)):
+                    self.values[match.group(1)] = self.expand(match.group(2))
+                continue
+            match = _ASSIGN.fullmatch(line)
+            if match:
+                self.values[match.group(1)] = self.parse_value(match.group(2))
+                continue
+            err(f"{path}:{number}: ignored, only NAME=value lines are read: {line.splitlines()[0]}")
+        return self
+
+    def lookup(self, name: str) -> str:
+        if name in self.values:
+            return self.values[name]
+        return self.extra.get(name) or os.environ.get(name, "")
+
+    def expand(self, text: str) -> str:
+        return _VARIABLE.sub(
+            lambda m: self.lookup(m.group(1) or m.group(3)) or (m.group(2) or ""), text)
+
+    def parse_value(self, text: str) -> str:
+        parts = []
+        index = 0
+        while index < len(text):
+            char = text[index]
+            if char == "'":
+                end = text.find("'", index + 1)
+                end = len(text) if end < 0 else end
+                parts.append(text[index + 1:end])
+                index = end + 1
+            elif char == '"':
+                end = index + 1
+                while end < len(text) and text[end] != '"':
+                    end += 2 if text[end] == "\\" else 1
+                parts.append(self.expand(text[index + 1:end].replace('\\"', '"')))
+                index = end + 1
+            elif char.isspace():
+                break
+            else:
+                end = index
+                while end < len(text) and text[end] not in "'\" \t":
+                    end += 1
+                parts.append(self.expand(text[index:end]))
+                index = end
+        return "".join(parts)
+
+    def is_set(self, name: str) -> bool:
+        return name in self.values or name in os.environ
+
+    def get(self, name: str, default: str = "") -> str:
+        value = self.values[name] if name in self.values else os.environ.get(name, "")
+        return value or default
+
+
+def load_conf(root: str, relative: str) -> Config:
+    return Config({"PK_REPO_ROOT": root}).load(os.path.join(root, *relative.split("/")))

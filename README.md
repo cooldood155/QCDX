@@ -27,9 +27,13 @@ builds, tests, installs and packages before you start writting code.
 | :-- | :-- |
 | CMake | 3.30 or newer |
 | Ninja | any recent |
+| Python | 3.8 or newer |
 | Conan | 2.x |
 | Git | any recent |
 | Compiler | GCC 13+, Clang 18+, AppleClang 15+ or MSVC 19.30+ |
+
+The scripts are Python and run from any shell. On Windows outside an MSYS2
+shell, start them as `python scripts\pk.py ...`.
 
 The default standards are C++23 and C23. Every supported OS, architecture and
 toolchain combination is listed in [`docs/BUILDING.md`](docs/BUILDING.md).
@@ -51,17 +55,17 @@ file contents, and refuses to run on a dirty tree so `git diff` shows exactly
 what it changed:
 
 ```bash
-./scripts/pk.sh rename myproject --description="What this project is" --version=0.1.0
+./scripts/pk.py rename myproject --description="What this project is" --version=0.1.0
 git diff --stat
 ```
 
 Check the tools, then build, run and test:
 
 ```bash
-./scripts/pk.sh doctor
-./scripts/pk.sh build
-./scripts/pk.sh run
-./scripts/pk.sh test
+./scripts/pk.py doctor
+./scripts/pk.py build
+./scripts/pk.py run
+./scripts/pk.py test
 ```
 
 The first `build` installs the Conan dependencies and configures CMake; later
@@ -88,9 +92,10 @@ Build types are `debug` (default), `release`, `relwithdebinfo` and
 `minsizerel`. Options such as `--werror`, `--lib=shared` or
 `--sanitize=address,undefined` are remembered per build tree.
 
-To type `pk` instead of `./scripts/pk.sh` from anywhere inside any project
-made from this template, install the shell function once, as described in
-[`PK_SH.md`](cmake/projectkit/docs/PK_SH.md#install-as-a-shell-command).
+To type `pk` instead of `./scripts/pk.py` from anywhere inside any project
+made from this template, install the shell function for bash or PowerShell
+once, as described in
+[`PK.md`](cmake/projectkit/docs/PK.md#install-as-a-shell-command).
 
 ### Without pk
 
@@ -98,7 +103,7 @@ made from this template, install the shell function once, as described in
 hand:
 
 ```bash
-./scripts/package.sh install --build_type=Debug
+./scripts/package.py install --build_type=Debug
 cmake --preset native-debug
 cmake --build build/native-debug
 ctest --test-dir build/native-debug --output-on-failure
@@ -165,13 +170,13 @@ builds.
 
 ## Verification and CI
 
-`verify.sh` runs the full pipeline for each build type: the preset workflow,
+`verify.py` runs the full pipeline for each build type: the preset workflow,
 every library type, installation, a consumer project that sees only the
 installed files, CPack and the host tools.
 
 ```bash
-./scripts/verify.sh list
-./scripts/verify.sh run --build_type=Debug,Release
+./scripts/verify.py list
+./scripts/verify.py run --build_type=Debug,Release
 ```
 
 The same script runs in CI for every push and pull request to `main` that
@@ -182,7 +187,7 @@ UCRT64), and as cross builds for Windows `x86_64` (MinGW-w64) and `arm64`
 ## Packaging
 
 ```bash
-./scripts/package.sh create --build_type=Debug,Release
+./scripts/package.py create --build_type=Debug,Release
 ```
 
 This builds the Conan package, then builds a small consumer against it. Other
@@ -220,7 +225,7 @@ my-project/
   tests/<name>/            tests
   tools/                   build-time tools
   cmake/projectkit/        the kit, updated with pk sync
-  scripts/                 pk.sh, verify.sh, package.sh and their settings
+  scripts/                 pk.py, verify.py, package.py, bootstrap.py, settings
   docs/                    guides
 ```
 
@@ -230,11 +235,11 @@ my-project/
 | :-- | :-- |
 | [`docs/FROM_ZERO_TO_PROJECT.md`](docs/FROM_ZERO_TO_PROJECT.md) | from an empty directory to a packaged project |
 | [`docs/BUILDING.md`](docs/BUILDING.md) | supported platforms, toolchains and cross targets |
-| [`PK_SH.md`](cmake/projectkit/docs/PK_SH.md) | every `pk` command, flag and setting |
+| [`PK.md`](cmake/projectkit/docs/PK.md) | every `pk` command, flag and setting |
 | [`PK_DEP.md`](cmake/projectkit/docs/PK_DEP.md) | `deps.json`, `conan.lock`, `pk dep` and `DEPS_*` |
-| [`VERIFY_SH.md`](cmake/projectkit/docs/VERIFY_SH.md) | the verification pipeline and its targets |
-| [`PACKAGE_SH.md`](cmake/projectkit/docs/PACKAGE_SH.md) | Conan packaging, editable mode and uploads |
-| [`ANALYSER_LAUNCHER_SH.md`](cmake/projectkit/docs/ANALYSER_LAUNCHER_SH.md) | clang-tidy and cppcheck integration |
+| [`VERIFY.md`](cmake/projectkit/docs/VERIFY.md) | the verification pipeline and its targets |
+| [`PACKAGE.md`](cmake/projectkit/docs/PACKAGE.md) | Conan packaging, editable mode and uploads |
+| [`ANALYSER_LAUNCHER.md`](cmake/projectkit/docs/ANALYSER_LAUNCHER.md) | clang-tidy and cppcheck integration |
 
 ## License
 
