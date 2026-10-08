@@ -73,17 +73,17 @@ $RECYCLE.BIN/
 # Build Systems / Generators
 # ==========================================
 
-# CMake
+# CMake (Meta Build System)
 build/
 build-*/
 cmake/projectkit/test_package/build/
 CMakeUserPresets.json
 
-# Ninja
+# Ninja (Native Build System)
 .ninja_deps
 .ninja_log
 
-# Package Manager (Conan)
+# Conan (Package Manager)
 ConanPresets.json
 
 # ==========================================
@@ -149,6 +149,10 @@ ubsan.log.*
 
 # Python Cache
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+.elc
 
 # ==========================================
 # In-Project Deamed Personal Directories
@@ -157,5 +161,5 @@ __pycache__/
 docs/archive
 docs/notes
 
-# ProjectKit install staging (pk stage, pk install, verify.py)
+# ProjectKit install staging (pk stage, pk install, pk verify)
 stage/
