@@ -68,6 +68,24 @@ jobs:
           python -m twine check --strict dist/*.whl dist/*.tar.gz
           ls -l dist
 
+      # pk.pyz reads its files from inside the zip, which behaves differently
+      # per Python version: run it on the oldest one supported.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        id: oldest
+        with:
+          python-version: '3.9'
+      - name: pk.pyz on Python 3.9
+        env:
+          PY39: ${{ steps.oldest.outputs.python-path }}
+        run: |
+          set -euo pipefail
+          pyz="$PWD/dist/pk.pyz"
+          cd "$RUNNER_TEMP"
+          "$PY39" "$pyz" --version
+          "$PY39" "$pyz" new probe --no-git
+          "$PY39" "$pyz" cmake-dir
+          test -f probe/CMakeLists.txt
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist

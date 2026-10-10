@@ -101,7 +101,9 @@ def copy_tree(source, target: Path, skip: Iterable[str] = SKIP) -> None:
 def copy_kit(target: Path) -> None:
     root = kit_root()
     for relative in KIT_PATHS:
-        source = root.joinpath(*relative.split("/"))
+        source = root
+        for part in relative.split("/"):  # one part at a time: zip paths on 3.9 take only one
+            source = source / part
         copy_tree(source, target.joinpath(*relative.split("/")))
     if os.name != "nt":
         for script in (target / "scripts").glob("*.py"):

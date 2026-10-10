@@ -57,6 +57,15 @@ class NewError(Exception):
     pass
 
 
+def write_lf(path: Path, text: str) -> None:
+    """Write with LF endings everywhere, like the template (.gitattributes eol=lf).
+
+    Not Path.write_text(newline=...): that argument needs Python 3.10.
+    """
+    with open(path, "w", encoding="utf-8", newline="\n") as file:
+        file.write(text)
+
+
 def git(args: List[str], cwd: Path) -> subprocess.CompletedProcess:
     return subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True)
 
@@ -120,24 +129,23 @@ def create(name: str, directory: Optional[str], description: str, version: str, 
     if not description:
         text = set_recipe_field(text, "description", name)
         cmake = target / "CMakeLists.txt"
-        cmake.write_text(re.sub(r'(DESCRIPTION\s*)"[^"]*"', lambda m: f'{m.group(1)}"{name}"',
-                                cmake.read_text(encoding="utf-8"), count=1), encoding="utf-8")
+        write_lf(cmake, re.sub(r'(DESCRIPTION\s*)"[^"]*"', lambda m: f'{m.group(1)}"{name}"',
+                               cmake.read_text(encoding="utf-8"), count=1))
     # The template's recipe names its own author, url and license; a new
     # project gets the given values (author: the git identity) or none.
     for field, value in (("license", license_id), ("author", author or git_identity()), ("url", url)):
         text = set_recipe_field(text, field, value)
-    recipe.write_text(text, encoding="utf-8", newline="\n")
+    write_lf(recipe, text)
 
     readme = target / "README.md"
     if readme.is_file():
         text = readme.read_text(encoding="utf-8").replace(TEMPLATE_DESCRIPTION, description or name, 1)
-        readme.write_text(text + README_FOOTER.format(version=resources.version()), encoding="utf-8",
-                          newline="\n")
+        write_lf(readme, text + README_FOOTER.format(version=resources.version()))
 
     state = target / "scripts" / "helpers" / "pk" / "upstream.conf"
     state.parent.mkdir(parents=True, exist_ok=True)
-    state.write_text(STATE.format(url=resources.UPSTREAM_URL, branch=resources.UPSTREAM_BRANCH,
-                                  commit=resources.commit()), encoding="utf-8", newline="\n")
+    write_lf(state, STATE.format(url=resources.UPSTREAM_URL, branch=resources.UPSTREAM_BRANCH,
+                                 commit=resources.commit()))
 
     if use_git:
         init_git(target, name)
