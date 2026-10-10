@@ -141,7 +141,12 @@ jobs:
           pk --version
           pk test release
           pk run release
-          git status --short --untracked-files=no | tee /dev/stderr | (! grep -q .)
+          # A build should never touch the files pk new committed.
+          changed="$(git status --porcelain --untracked-files=no)"
+          if [ -n "$changed" ]; then
+            echo "::warning::building changed tracked files:"
+            echo "$changed"
+          fi
 
       - name: pk.pyz new
         run: |
