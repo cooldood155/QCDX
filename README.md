@@ -2,6 +2,8 @@
 
 [![verify](https://github.com/cooldood155/QCDX/actions/workflows/verify.yml/badge.svg)](https://github.com/cooldood155/QCDX/actions/workflows/verify.yml)
 
+[Documentation](#documentation)
+
 A template for C and C++ projects built on **projectkit**, a set of CMake
 modules and scripts under `cmake/projectkit/`. A fresh copy already contains a
 working library, application, test and build-time tool, so it configures,
