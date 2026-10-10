@@ -1,6 +1,6 @@
 # QCDX
 
-[![verify](https://github.com/cooldood155/QCDX/actions/workflows/verify.yml/badge.svg)](https://github.com/cooldood155/QCDX/actions/workflows/verify.yml)
+[![verify](https://github.com/cooldood155/QCDX/actions/workflows/verify.yml/badge.svg)](https://github.com/cooldood155/QCDX/actions/workflows/verify.yml) [![release](https://github.com/cooldood155/QCDX/actions/workflows/release.yml/badge.svg)](https://github.com/cooldood155/QCDX/actions/workflows/release.yml)
 
 [Documentation](#documentation)
 
