@@ -1,6 +1,6 @@
 # QCDX
 
-[![verify](https://github.com/cooldood155/QCDX/actions/workflows/verify.yml/badge.svg)](https://github.com/cooldood155/QCDX/actions/workflows/verify.yml) [![release](https://github.com/cooldood155/QCDX/actions/workflows/release.yml/badge.svg)](https://github.com/cooldood155/QCDX/actions/workflows/release.yml)
+[![ci](https://github.com/cooldood155/QCDX/actions/workflows/ci.yml/badge.svg)](https://github.com/cooldood155/QCDX/actions/workflows/ci.yml) [![release](https://github.com/cooldood155/QCDX/actions/workflows/release.yml/badge.svg)](https://github.com/cooldood155/QCDX/actions/workflows/release.yml) [![template-sync](https://github.com/cooldood155/QCDX/actions/workflows/template-sync.yml/badge.svg)](https://github.com/cooldood155/QCDX/actions/workflows/template-sync.yml)
 
 [Documentation](#documentation)
 
