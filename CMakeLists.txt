@@ -1,53 +1,53 @@
-cmake_minimum_required(VERSION 3.30)
+# The QCDX kit (ProjectKit) as a CMake package. Projects made with 'pk new'
+# vendor the kit and never need this; it is for using ProjectKit modules in an
+# existing CMake project:
+#
+#   cmake -S . -B build && cmake --install build --prefix /usr/local
+#   find_package(QCDX 0.1 REQUIRED)        # in the consuming project
+#   include(ProjectKit)
+#
+# or without installing anything (CMake 3.24+):
+#
+#   include(FetchContent)
+#   FetchContent_Declare(qcdx URL <release qcdx-X.Y.Z.tar.gz> URL_HASH SHA256=...)
+#   FetchContent_MakeAvailable(qcdx)
+#   find_package(QCDX 0.1 REQUIRED)
+#   include(ProjectKit)
 
-list(APPEND CMAKE_MODULE_PATH
-  "${CMAKE_CURRENT_LIST_DIR}/cmake/projectkit"
-  "${CMAKE_CURRENT_LIST_DIR}/cmake")
+cmake_minimum_required(VERSION 3.25)
 
-include(ConanBuildDir)
+file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/cmake/projectkit/VERSION" _qcdx_version LIMIT_COUNT 1)
 
-pk_require_conan_build_dir(
-  OUT_BUILD_TYPE QCDX_BUILD_TYPE
-  OUT_DIR        qcdx_conan_dir)
+project(QCDX
+  VERSION       ${_qcdx_version}
+  DESCRIPTION   "ProjectKit: CMake modules and scripts for C and C++ projects"
+  HOMEPAGE_URL  "https://github.com/cooldood155/QCDX"
+  LANGUAGES     NONE)
 
-set(CONAN_BUILD_DIR "${qcdx_conan_dir}" CACHE INTERNAL
-  "Conan's binary output path for the current configuration / build type.")
-
-project(qcdx
-  VERSION     0.1.0
-  DESCRIPTION "Template project built on ProjectKit"
-  LANGUAGES   C CXX)
-
-include(ProjectKit)
-
-pk_project_setup(CXX_STANDARD 23 C_STANDARD 23)
-pk_check_shared_intent()
-pk_require_host_tools()
-
-if(NOT CMAKE_CROSSCOMPILING)
-  add_subdirectory(tools)
+# Added by FetchContent or add_subdirectory: point find_package(QCDX) at this
+# tree. QCDX_DIR is what find_package checks first; the redirect file serves
+# FetchContent_Declare(... FIND_PACKAGE_ARGS) and OVERRIDE_FIND_PACKAGE.
+if(NOT PROJECT_IS_TOP_LEVEL)
+  set(QCDX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake" CACHE PATH "QCDX package configuration" FORCE)
+  if(CMAKE_FIND_PACKAGE_REDIRECTS_DIR)
+    file(WRITE "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/qcdx-extra.cmake"
+      "include(\"${CMAKE_CURRENT_SOURCE_DIR}/cmake/QCDXConfig.cmake\")\n")
+    file(WRITE "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/qcdx-extra-version.cmake"
+      "include(\"${CMAKE_CURRENT_SOURCE_DIR}/cmake/QCDXConfigVersion.cmake\")\n")
+  endif()
+  return()
 endif()
 
-if(NOT QCDX_LIBRARY_TYPE STREQUAL "NONE")
-  add_subdirectory(src)
-endif()
+# <prefix>/share/qcdx/cmake/ is on find_package's default search path.
+# GNUInstallDirs is not used: it needs a language enabled, only share/ matters.
+set(QCDX_INSTALL_CMAKEDIR "share/qcdx/cmake" CACHE STRING
+  "Where QCDXConfig.cmake and projectkit/ are installed, relative to the prefix")
 
-if(QCDX_BUILD_APPS)
-  add_subdirectory(apps)
-endif()
+install(DIRECTORY cmake/projectkit
+  DESTINATION "${QCDX_INSTALL_CMAKEDIR}"
+  USE_SOURCE_PERMISSIONS
+  PATTERN "__pycache__" EXCLUDE
+  PATTERN "*.pyc" EXCLUDE)
 
-if(QCDX_BUILD_TESTS OR NOT QCDX_FUZZER STREQUAL "off")
-  enable_testing()
-endif()
-
-if(QCDX_BUILD_TESTS)
-  add_subdirectory(tests)
-endif()
-
-if(QCDX_INSTALL AND NOT QCDX_LIBRARY_TYPE STREQUAL "NONE")
-  pk_install_package(INTERFACE_TARGETS qcdx_warnings qcdx_options)
-endif()
-
-pk_link_compile_commands()
-
-pk_enable_cpack()
+install(FILES cmake/QCDXConfig.cmake cmake/QCDXConfigVersion.cmake
+  DESTINATION "${QCDX_INSTALL_CMAKEDIR}")

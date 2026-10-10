@@ -1,0 +1,88 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "qcdx"
+dynamic = ["version"]
+description = "Create, build, test, package and release C and C++ projects with CMake and Conan"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Evan R. Reumann", email = "evanrileyreumann@gmail.com" }]
+requires-python = ">=3.9"
+keywords = ["cmake", "conan", "c", "c++", "project-template", "scaffolding", "build-system"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: C",
+  "Programming Language :: C++",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Build Tools",
+  "Topic :: Software Development :: Code Generators",
+]
+# QCDX itself needs nothing but Python. The 'tools' extra brings Conan, CMake
+# and Ninja along for machines that have none of them yet (a compiler is still
+# needed): pipx install "qcdx[tools]"
+dependencies = []
+
+[project.optional-dependencies]
+tools = ["conan>=2.0,<3", "cmake>=3.30", "ninja"]
+
+[project.scripts]
+pk = "qcdx.cli:main"
+qcdx = "qcdx.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/cooldood155/QCDX"
+Documentation = "https://github.com/cooldood155/QCDX#readme"
+Issues = "https://github.com/cooldood155/QCDX/issues"
+Changelog = "https://github.com/cooldood155/QCDX/releases"
+
+# One version for everything: Python, CMake (QCDXConfigVersion.cmake), Conan
+# (conanfile.py) and every project's vendored kit read this file.
+[tool.hatch.version]
+path = "cmake/projectkit/VERSION"
+pattern = "(?P<version>[0-9][^\\s]*)"
+
+[tool.hatch.build]
+# Written by the release workflow, ignored by git.
+artifacts = ["src/qcdx/_commit.py"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/qcdx"]
+exclude = ["**/__pycache__", "**/*.pyc"]
+
+# The kit (exactly what 'pk new' vendors and 'pk sync' updates) and the
+# template, as package data.
+[tool.hatch.build.targets.wheel.force-include]
+"cmake/QCDXConfig.cmake" = "qcdx/data/kit/cmake/QCDXConfig.cmake"
+"cmake/QCDXConfigVersion.cmake" = "qcdx/data/kit/cmake/QCDXConfigVersion.cmake"
+"cmake/projectkit" = "qcdx/data/kit/cmake/projectkit"
+"scripts/pk.py" = "qcdx/data/kit/scripts/pk.py"
+"scripts/verify.py" = "qcdx/data/kit/scripts/verify.py"
+"scripts/package.py" = "qcdx/data/kit/scripts/package.py"
+"scripts/release.py" = "qcdx/data/kit/scripts/release.py"
+"scripts/bootstrap.py" = "qcdx/data/kit/scripts/bootstrap.py"
+".github/actions/pk-setup" = "qcdx/data/kit/.github/actions/pk-setup"
+"template" = "qcdx/data/template"
+
+# The sdist is the whole source: the Python package, and also the CMake
+# package (CMakeLists.txt) and the Conan recipe, so it doubles as the
+# FetchContent download.
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src", "/cmake", "/scripts", "/.github/actions", "/template", "/conan", "/tests", "/docs",
+  "/CMakeLists.txt", "/conanfile.py", "/README.md", "/LICENSE", "/pyproject.toml",
+]
+exclude = ["**/__pycache__", "**/*.pyc"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"

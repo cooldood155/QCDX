@@ -1,0 +1,203 @@
+name: ci
+
+# Tests every way QCDX is shipped: the Python package (pytest, wheel, sdist,
+# pk.pyz), a project made with 'pk new' built and tested on Linux, macOS and
+# Windows, and the CMake and Conan packages of the kit. release.yml runs this
+# same workflow before it publishes anything.
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'LICENSE']
+  pull_request:
+    branches: [main]
+    paths-ignore: ['**.md', 'LICENSE']
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+jobs:
+  pytest:
+    name: pytest ${{ matrix.os }} py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Oldest supported Python on one OS, newest everywhere.
+          - { os: ubuntu-24.04, python: '3.9' }
+          - { os: ubuntu-24.04, python: '3.13' }
+          - { os: macos-15,     python: '3.13' }
+          - { os: windows-2022, python: '3.13' }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install --disable-pip-version-check pytest
+      - run: python -m pytest -q
+
+  dist:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - run: python -m pip install --disable-pip-version-check build twine
+
+      # 'pk new' records this commit as the base for the first 'pk sync'.
+      - name: Record the commit
+        run: echo "COMMIT = \"$GITHUB_SHA\"" > src/qcdx/_commit.py
+
+      - name: Build the sdist, wheel and pk.pyz
+        run: |
+          python -m build
+          python dev/build_pyz.py dist/qcdx-*.whl dist/pk.pyz
+          python -m twine check --strict dist/*.whl dist/*.tar.gz
+          ls -l dist
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  # A project made by 'pk new' from the built wheel (and from pk.pyz) must
+  # build, test and run, exactly as a user's would.
+  smoke:
+    needs: dist
+    name: smoke ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: linux-x86_64,   os: ubuntu-24.04 }
+          - { target: macos-armv8,    os: macos-15 }
+          - { target: windows-ucrt64, os: windows-2022, msystem: UCRT64 }
+    defaults:
+      run:
+        shell: ${{ matrix.msystem && 'msys2 {0}' || 'bash' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/pk-setup
+        with:
+          target: ${{ matrix.target }}
+          msystem: ${{ matrix.msystem }}
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist
+
+      - name: Install the wheel
+        run: python -m pip install --disable-pip-version-check --break-system-packages dist/*.whl
+
+      - name: pk new, build, test, run
+        run: |
+          set -euo pipefail
+          # Outside the checkout: pk new must make a repository of its own.
+          mkdir -p "$HOME/qcdx-smoke" && cd "$HOME/qcdx-smoke"
+          git config --global user.name "QCDX CI"
+          git config --global user.email "ci@example.invalid"
+          pk --version
+          pk new rocket --description="Smoke test" --license=MIT
+          cd rocket
+          pk --version
+          pk test release
+          pk run release
+          git status --short --untracked-files=no | tee /dev/stderr | (! grep -q .)
+
+      - name: pk.pyz new
+        run: |
+          set -euo pipefail
+          pyz="$PWD/dist/pk.pyz"
+          cd "$HOME/qcdx-smoke"
+          python "$pyz" new probe --no-git
+          test -f probe/CMakeLists.txt
+          test -x probe/scripts/pk.py || [ "$RUNNER_OS" = Windows ]
+
+  # The kit as a CMake package (install + find_package, FetchContent from the
+  # sdist) and as a Conan package (conan create runs conan/test_package).
+  kit-packages:
+    needs: dist
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb # v4.4.2
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist
+
+      - name: cmake --install, then find_package(QCDX)
+        run: |
+          set -euo pipefail
+          cmake -S . -B "$RUNNER_TEMP/kit" -G Ninja
+          cmake --install "$RUNNER_TEMP/kit" --prefix "$RUNNER_TEMP/prefix"
+          mkdir -p "$RUNNER_TEMP/consumer"
+          cat > "$RUNNER_TEMP/consumer/CMakeLists.txt" <<'EOF'
+          cmake_minimum_required(VERSION 3.30)
+          project(consumer LANGUAGES NONE)
+          find_package(QCDX ${WANT} REQUIRED)
+          include(ProjectKit)
+          if(NOT COMMAND pk_create_library)
+            message(FATAL_ERROR "ProjectKit not loaded")
+          endif()
+          EOF
+          version="$(cat cmake/projectkit/VERSION)"
+          cmake -S "$RUNNER_TEMP/consumer" -B "$RUNNER_TEMP/c1" -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/prefix" -DWANT="${version%.*}"
+          if cmake -S "$RUNNER_TEMP/consumer" -B "$RUNNER_TEMP/c2" -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/prefix" -DWANT=99.0 2>/dev/null; then
+            echo "::error::find_package(QCDX 99.0) should have failed"; exit 1
+          fi
+
+      - name: FetchContent from the sdist
+        run: |
+          set -euo pipefail
+          sdist="$(ls "$GITHUB_WORKSPACE"/dist/qcdx-*.tar.gz)"
+          mkdir -p "$RUNNER_TEMP/fetch"
+          cat > "$RUNNER_TEMP/fetch/CMakeLists.txt" <<EOF
+          cmake_minimum_required(VERSION 3.30)
+          project(fetch LANGUAGES NONE)
+          include(FetchContent)
+          FetchContent_Declare(qcdx URL "file://${sdist}")
+          FetchContent_MakeAvailable(qcdx)
+          find_package(QCDX REQUIRED)
+          include(ProjectKit)
+          EOF
+          cmake -S "$RUNNER_TEMP/fetch" -B "$RUNNER_TEMP/fetch-build"
+
+      - name: conan create
+        run: |
+          python -m pip install --disable-pip-version-check "conan>=2,<3"
+          conan profile detect --force
+          conan create .
+
+      - name: pk cmake-dir from the wheel
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check dist/*.whl
+          cmake -S "$RUNNER_TEMP/consumer" -B "$RUNNER_TEMP/c3" -DQCDX_DIR="$(pk cmake-dir)"
