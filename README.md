@@ -198,6 +198,27 @@ find_package(myproject REQUIRED)
 target_link_libraries(other PRIVATE myproject::myproject)
 ```
 
+## Releases
+
+Push a version tag and CI builds, tests and archives every target provided then
+creates a draft GitHub release with checksums:
+
+```bash
+git tag -s v1.2.0 -m "myproject 1.2.0"
+git push origin v1.2.0
+```
+
+The tag must match `project(VERSION)`. Targets, archive contents, signing and
+a separate releases repository are set in
+`scripts/helpers/release/release.conf`, and every step also runs locally:
+
+```bash
+pk release stage linux-x86_64
+pk release pack linux-x86_64
+```
+
+Details: [`RELEASE.md`](cmake/projectkit/docs/RELEASE.md).
+
 ## Keeping projectkit up to date
 
 Every project made from this template carries its own copy of the kit. When
@@ -225,7 +246,7 @@ my-project/
   tests/<name>/            tests
   tools/                   build-time tools
   cmake/projectkit/        the kit, updated with pk sync
-  scripts/                 pk.py, verify.py, package.py, bootstrap.py, settings
+  scripts/                 pk.py, verify.py, package.py, release.py, bootstrap.py, settings
   docs/                    guides
 ```
 
@@ -238,6 +259,7 @@ my-project/
 | [`PK.md`](cmake/projectkit/docs/PK.md) | every `pk` command, flag and setting |
 | [`PK_DEP.md`](cmake/projectkit/docs/PK_DEP.md) | `deps.json`, `conan.lock`, `pk dep` and `DEPS_*` |
 | [`VERIFY.md`](cmake/projectkit/docs/VERIFY.md) | the verification pipeline and its targets |
+| [`RELEASE.md`](cmake/projectkit/docs/RELEASE.md) | tagged releases: targets, archives, checks, signing |
 | [`PACKAGE.md`](cmake/projectkit/docs/PACKAGE.md) | Conan packaging, editable mode and uploads |
 | [`ANALYSER_LAUNCHER.md`](cmake/projectkit/docs/ANALYSER_LAUNCHER.md) | clang-tidy and cppcheck integration |
 

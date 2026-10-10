@@ -163,3 +163,6 @@ docs/notes
 
 # ProjectKit install staging (pk stage, pk install, pk verify)
 stage/
+
+# Release settings; override the Visual Studio [Rr]elease/ rule
+!scripts/helpers/release/

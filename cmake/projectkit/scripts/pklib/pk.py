@@ -46,6 +46,7 @@ COMMANDS = (
     ("install and ship", "stage", "", "", "fresh install into stage/, checked, with a report"),
     ("install and ship", "verify", "", "check", "full verification matrix (scripts/verify.py)"),
     ("install and ship", "package", "", "", "Conan packaging: create, upload, ... (scripts/package.py)"),
+    ("install and ship", "release", "", "", "release archives how the CI makes them (scripts/release.py)"),
     ("code quality", "analyze", "", "", "build with clang-tidy and cppcheck (own tree)"),
     ("code quality", "sanitize", "", "", "build and test with sanitizers (own tree)"),
     ("code quality", "memcheck", "", "", "run the tests under Valgrind (own tree)"),
@@ -271,7 +272,8 @@ class Pk:
         self.upstream_branch = conf.get("PK_UPSTREAM_BRANCH", "main")
         self.sync_paths = conf.get(
             "PK_SYNC_PATHS",
-            "cmake/projectkit scripts/pk.py scripts/verify.py scripts/package.py scripts/bootstrap.py").split()
+            ("cmake/projectkit scripts/pk.py scripts/verify.py scripts/package.py scripts/release.py "
+             "scripts/bootstrap.py .github/actions/pk-setup")).split()
 
         self.cmd = ""
         self.type = ""
@@ -429,7 +431,7 @@ class Pk:
             return f"{command} [TYPE] [flag...] [-- build-tool args]"
         if command in ("test", "memcheck", "sanitize"):
             return f"{command} [TYPE] [flag...] [-- ctest args]"
-        if command in ("verify", "package", "rename"):
+        if command in ("verify", "package", "release", "rename"):
             return f"{command} [args...]   (everything is passed to the script)"
         return {
             "configure": "configure [TYPE] [flag...] [-- cmake args]",
@@ -467,6 +469,7 @@ class Pk:
             "doctor": [f"{s} doctor", f"{s} doctor --fix"],
             "verify": [f"{s} verify list", f"{s} verify run --native --build_type=Debug"],
             "package": [f"{s} package create", f"{s} package help"],
+            "release": [f"{s} release list", f"{s} release stage linux-x86_64", f"{s} release pack linux-x86_64"],
             "rename": [f"{s} rename myproject --dry-run"],
             "shell-init": [
                 f'eval "$(python3 {native_path(self.root)}/scripts/pk.py shell-init)"    # once, in ~/.bashrc',
@@ -1654,6 +1657,8 @@ class Pk:
             out("\n".join(NAMES))
         elif resolved == "verify":
             out("\n".join(["list", "list-possible", "run", "run-possible", "clean", "help"]))
+        elif resolved == "release":
+            out("\n".join(["plan", "stage", "pack", "finalize", "list", "help"]))
         elif resolved == "package":
             out("\n".join(["reference", "install", "create", "build", "export", "export-pkg", "list", "info",
                            "path", "editable", "remove", "upload", "cache-clean", "help"]))
@@ -1707,6 +1712,10 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
         return verify.main(args, root)
     if resolved == "package":
         return pk.package_tool(args)
+    if resolved == "release":
+        from . import release
+
+        return release.main(args, root)
     if resolved == "rename":
         from . import bootstrap
 

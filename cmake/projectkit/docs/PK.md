@@ -61,6 +61,7 @@ type pk
 | `sync`      | update the kit from the QCDX template, as one commit            |
 | `verify`    | runs `scripts/verify.py` with the given arguments               |
 | `package`   | runs `scripts/package.py` with the given arguments              |
+| `release`   | runs `scripts/release.py` with the given arguments              |
 | `rename`    | runs `scripts/bootstrap.py` with the given arguments            |
 | `shell-init`| prints the `pk` function and completion for `~/.bashrc`         |
 
@@ -234,7 +235,7 @@ PK_NATIVE_PROFILE=native                 # profiles/<name> for native builds
 PK_FORMAT_EXCLUDE="cmake/projectkit/ build/ stage/ _install/"
 PK_UPSTREAM_URL=https://github.com/cooldood155/QCDX.git # sync's template
 PK_UPSTREAM_BRANCH=main
-PK_SYNC_PATHS="cmake/projectkit scripts/pk.py scripts/verify.py scripts/package.py"
+PK_SYNC_PATHS="cmake/projectkit scripts/pk.py scripts/verify.py scripts/package.py scripts/release.py scripts/bootstrap.py .github/actions/pk-setup"
 ```
 
 A fork of the template should set `PK_UPSTREAM_URL` to its own repository.
