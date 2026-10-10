@@ -89,7 +89,15 @@ def copy_tree(source, target: Path, skip: Iterable[str] = SKIP) -> None:
     skip = set(skip)
     if source.is_file():
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(source.read_bytes())
+        data = source.read_bytes()
+        target.write_bytes(data)
+        if os.name == "nt":
+            return
+        real = Path(str(source))
+        if real.is_file():  # source checkout or installed wheel: keep the mode exactly
+            target.chmod(real.stat().st_mode & 0o777)
+        elif data.startswith(b"#!"):  # inside pk.pyz modes are unreadable: scripts get +x
+            target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
         return
     target.mkdir(parents=True, exist_ok=True)
     for child in source.iterdir():

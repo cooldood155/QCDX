@@ -115,22 +115,24 @@ def create(name: str, directory: Optional[str], description: str, version: str, 
 
     if name != TEMPLATE_NAME:
         bootstrap = [sys.executable, str(target / "scripts" / "bootstrap.py"), name, f"--from={TEMPLATE_NAME}",
-                     f"--version={version}", "--yes", "--force"]
-        if description:
-            bootstrap.append(f"--description={description}")
+                     "--yes", "--force"]
         env = dict(os.environ, PK_REPO_ROOT=str(target), PK_SELF_NAME="pk rename")
         result = subprocess.run(bootstrap, cwd=str(target), env=env, capture_output=True, text=True)
         if result.returncode != 0:
             sys.stderr.write(result.stdout + result.stderr)
             raise NewError("renaming the template failed (output above)")
 
+    # Description and version are set here, not by the rename, which is
+    # skipped when NAME is the template's own name.
+    cmake = target / "CMakeLists.txt"
+    text = cmake.read_text(encoding="utf-8")
+    text = re.sub(r'(DESCRIPTION\s*)"[^"]*"', lambda m: f'{m.group(1)}"{description or name}"', text, count=1)
+    text = re.sub(r"(project\s*\([^)]*?VERSION\s+)[0-9]+\.[0-9]+\.[0-9]+", lambda m: m.group(1) + version, text,
+                  count=1, flags=re.IGNORECASE)
+    write_lf(cmake, text)
+
     recipe = target / "conanfile.py"
-    text = recipe.read_text(encoding="utf-8")
-    if not description:
-        text = set_recipe_field(text, "description", name)
-        cmake = target / "CMakeLists.txt"
-        write_lf(cmake, re.sub(r'(DESCRIPTION\s*)"[^"]*"', lambda m: f'{m.group(1)}"{name}"',
-                               cmake.read_text(encoding="utf-8"), count=1))
+    text = set_recipe_field(recipe.read_text(encoding="utf-8"), "description", description or name)
     # The template's recipe names its own author, url and license; a new
     # project gets the given values (author: the git identity) or none.
     for field, value in (("license", license_id), ("author", author or git_identity()), ("url", url)):

@@ -1,0 +1,283 @@
+# QCDX-template
+
+[![verify](https://github.com/cooldood155/QCDX-template/actions/workflows/verify.yml/badge.svg)](https://github.com/cooldood155/QCDX-template/actions/workflows/verify.yml) [![release](https://github.com/cooldood155/QCDX-template/actions/workflows/release.yml/badge.svg)](https://github.com/cooldood155/QCDX-template/actions/workflows/release.yml)
+
+[Documentation](#documentation)
+
+A template for C and C++ projects built on **projectkit**, a set of CMake
+modules and scripts under `cmake/projectkit/`. A fresh copy already contains a
+working library, application, test and build-time tool, so it configures,
+builds, tests, installs and packages before you start writing code.
+
+This repository is generated: on every [QCDX](https://github.com/cooldood155/QCDX)
+release it is replaced with exactly what `pk new qcdx` creates. Changes
+belong in QCDX, a commit made here is overwritten by the next release.
+
+- **CMake 3.30+, Ninja and Conan 2**, with presets for native builds, host
+  tools and cross builds.
+- **One call per target**: `pk_create_library`, `pk_create_app`,
+  `pk_create_test` and `pk_create_tool` find their sources, headers and
+  settings by convention.
+- **C and C++**: C++ libraries, C libraries, and C interfaces implemented in
+  C++, each with a generated export header (`export.hpp` or `export.h`).
+- **Static, shared or both** from one build, chosen per project or pinned per
+  library.
+- **Checks built in**: warnings, hardening, sanitizers, clang-tidy, cppcheck,
+  Valgrind and coverage, each one option away.
+- **`pk`**, one command line for all of it, Conan and CMake never have to be
+  typed by hand.
+
+## Requirements
+
+| Tool | Version |
+| :-- | :-- |
+| CMake | 3.30 or newer |
+| Ninja | any recent |
+| Python | 3.9 or newer |
+| Conan | 2.x |
+| Git | any recent |
+| Compiler | GCC 13+, Clang 18+, AppleClang 15+ or MSVC 19.30+ |
+
+The scripts are Python and run from any shell. On Windows outside an MSYS2
+shell, start them as `python scripts\pk.py ...`.
+
+The default standards are C++23 and C23. Every supported OS, architecture and
+toolchain combination is listed in [`docs/BUILDING.md`](docs/BUILDING.md).
+
+## Quick start
+
+The fastest way is the QCDX package, which creates the project with its own
+name in one step:
+
+```bash
+pipx install qcdx
+pk new myproject --description="What this project is" --license=MIT
+cd myproject
+```
+
+Or create a repository from this template, then clone it:
+
+```bash
+gh repo create my-project --template cooldood155/QCDX-template --public --clone
+cd my-project
+```
+
+Without the GitHub CLI, press **Use this template** on GitHub and clone the
+new repository. Then give the project its own name. The rename covers
+directories, file names and file contents, and refuses to run on a dirty tree
+so `git diff` shows exactly what it changed:
+
+```bash
+./scripts/pk.py rename myproject --description="What this project is" --version=0.1.0
+git diff --stat
+```
+
+Either way, check the tools, then build, run and test:
+
+```bash
+./scripts/pk.py doctor
+./scripts/pk.py build
+./scripts/pk.py run
+./scripts/pk.py test
+```
+
+The first `build` installs the Conan dependencies and runs the CMake
+configuration; later builds only rebuild. Every Conan and CMake command `pk`
+runs is printed before it runs, and `-n` prints them without running anything.
+
+Then replace this README with your own project's.
+
+## Everyday commands
+
+| Command | What it does |
+| :-- | :-- |
+| `pk build [TYPE]` | install dependencies, configure and build, each only when needed |
+| `pk run [APP] -- ARGS` | build one application and run it |
+| `pk test [TYPE]` | build with tests and run them with ctest |
+| `pk stage` | install into `stage/`, check the package and write a report |
+| `pk dep ...` | add, change, remove, update and inspect third-party packages |
+| `pk status` | the build trees, their options and dependency state |
+| `pk sync` | pull projectkit updates from QCDX |
+| `pk full-clean` | remove everything the build generated |
+| `pk help COMMAND` | every flag a command accepts |
+
+Build types are `debug` (default), `release`, `relwithdebinfo` and
+`minsizerel`. Options such as `--werror`, `--lib=shared` or
+`--sanitize=address,undefined` are remembered per build tree.
+
+With `pipx install qcdx`, `pk` works from anywhere inside any project. Without
+it, install the shell function for bash or PowerShell once, as described in
+[`PK.md`](cmake/projectkit/docs/PK.md#install-as-a-shell-command).
+
+### Without pk
+
+`pk` only decides which of these steps are needed. They can always be run by
+hand:
+
+```bash
+./scripts/package.py install --build_type=Debug
+cmake --preset native-debug
+cmake --build build/native-debug
+ctest --test-dir build/native-debug --output-on-failure
+```
+
+## Adding code
+
+Each kind of target lives in its own directory, named after the target:
+
+| Target | Sources | Declared in |
+| :-- | :-- | :-- |
+| Library | `src/<name>/`, public headers in `include/<name>/` | `src/CMakeLists.txt` |
+| Application | `apps/<name>/` | `apps/CMakeLists.txt` |
+| Tests (Catch2) | `tests/<name>/` | `tests/CMakeLists.txt` |
+| Build-time tool | `tools/` | `tools/CMakeLists.txt` |
+
+```cmake
+pk_create_library(NAME myproject REQUIRE_SOURCES REQUIRE_PUBLIC_HEADERS)
+pk_create_app(NAME myproject DEFAULT_DIRS LINK_PRIVATE myproject::myproject)
+pk_create_test(NAME myproject)
+```
+
+A library with a C interface and a C++ implementation takes `LANGUAGE C`: its
+public headers are `.h` files, its export header becomes `export.h`, and its
+private headers in `src/<name>/` can be C++.
+
+The full walkthrough, including tools and cross builds, is in
+[`docs/FROM_ZERO_TO_PROJECT.md`](docs/FROM_ZERO_TO_PROJECT.md).
+
+## Dependencies
+
+Third-party packages are declared once, in `deps.json`, and pinned in
+`conan.lock`; both are committed. `conanfile.py` and the CMake creators read
+the deps.json.
+
+```bash
+pk dep add "sqlite3/[>=3.45 <4]"   # declare, lock (pin) and discover package/target
+pk dep ls                          # what is declared, locked and used by what
+pk dep why zlib                    # who pulls this package in and who uses it
+pk dep update sqlite3              # newest version within the range
+pk dep check                       # deps.json, CMake and the lock all match
+```
+
+```cmake
+pk_create_library(NAME myproject ... DEPS_PRIVATE sqlite3)
+```
+
+Versions only change when you ask (`add`, `update`, or a new range); builds
+fail rather than resolve past the lock. Details:
+[`PK_DEP.md`](cmake/projectkit/docs/PK_DEP.md).
+
+## Cross builds
+
+Each cross target is a Conan profile in `profiles/` plus matching presets:
+
+```bash
+pk list
+pk build -x x86_64-mingw-w64
+```
+
+`pk` builds the host tools natively first, then the cross build. Binaries built
+for another system cannot run here, tests are built but not run on cross
+builds.
+
+## Verification and CI
+
+`verify.py` runs the full pipeline for each build type: the preset workflow,
+every library type, installation, a consumer project that sees only the
+installed files, CPack and the host tools.
+
+```bash
+./scripts/verify.py list
+./scripts/verify.py run --build_type=Debug,Release
+```
+
+The same script runs in CI for every push and pull request to `main` that
+changes code: on Linux (`x86_64`, `armv8`), macOS (`armv8`) and Windows (MSYS2
+UCRT64), and as cross builds for Windows `x86_64` (MinGW-w64) and `arm64`
+(llvm-mingw). Every sync from QCDX is such a push, the badge above shows that
+the newest QCDX release still builds everywhere.
+
+## Packaging
+
+```bash
+./scripts/package.py create --build_type=Debug,Release
+```
+
+This builds the Conan package, then builds a small consumer against it. Other
+projects use it like any Conan package:
+
+```cmake
+find_package(myproject REQUIRED)
+target_link_libraries(other PRIVATE myproject::myproject)
+```
+
+## Releases
+
+Push a version tag and CI builds, tests and archives every target, then
+creates a draft GitHub release with checksums:
+
+```bash
+git tag -s v1.2.0 -m "myproject 1.2.0"
+git push origin v1.2.0
+```
+
+The tag must match `project(VERSION)`. Targets, archive contents, signing and
+a separate releases repository are set in
+`scripts/helpers/release/release.conf`, and every step also runs locally:
+
+```bash
+pk release stage linux-x86_64
+pk release pack linux-x86_64
+```
+
+Details: [`RELEASE.md`](cmake/projectkit/docs/RELEASE.md).
+
+## Keeping projectkit up to date
+
+Every project made from this template carries its own copy of the kit. When
+QCDX improves, bring the changes in with one command:
+
+```bash
+pk sync -n
+pk sync
+```
+
+Only QCDX's changes are applied, as a 3-way merge, changes made to the kit in
+your project are kept. The result is a single commit.
+`scripts/helpers/pk/upstream.conf` records the QCDX commit this template came
+from, so the first sync starts from the exact base.
+
+## Layout
+
+```text
+my-project/
+  CMakeLists.txt           project(), pk_project_setup and the subdirectories
+  CMakePresets.json        native, host-tools and cross presets
+  conanfile.py             Conan recipe, version read from CMakeLists.txt
+  profiles/                Conan profiles: native, cross targets, CI
+  include/<name>/          public headers
+  src/<name>/              library sources and private headers
+  apps/<name>/             applications
+  tests/<name>/            tests
+  tools/                   build-time tools
+  cmake/projectkit/        the kit, updated with pk sync
+  scripts/                 pk.py, verify.py, package.py, release.py, bootstrap.py, settings
+  docs/                    guides
+```
+
+## Documentation
+
+| Document | Covers |
+| :-- | :-- |
+| [`docs/FROM_ZERO_TO_PROJECT.md`](docs/FROM_ZERO_TO_PROJECT.md) | from an empty directory to a packaged project |
+| [`docs/BUILDING.md`](docs/BUILDING.md) | supported platforms, toolchains and cross targets |
+| [`PK.md`](cmake/projectkit/docs/PK.md) | every `pk` command, flag and setting |
+| [`PK_DEP.md`](cmake/projectkit/docs/PK_DEP.md) | `deps.json`, `conan.lock`, `pk dep` and `DEPS_*` |
+| [`VERIFY.md`](cmake/projectkit/docs/VERIFY.md) | the verification pipeline and its targets |
+| [`RELEASE.md`](cmake/projectkit/docs/RELEASE.md) | tagged releases: targets, archives, checks, signing |
+| [`PACKAGE.md`](cmake/projectkit/docs/PACKAGE.md) | Conan packaging, editable mode and uploads |
+| [`ANALYSER_LAUNCHER.md`](cmake/projectkit/docs/ANALYSER_LAUNCHER.md) | clang-tidy and cppcheck integration |
+
+## License
+
+MIT, see [`LICENSE`](LICENSE).

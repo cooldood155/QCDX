@@ -83,3 +83,24 @@ def test_new_refuses_bad_names_and_full_directories(pk, tmp_path):
     (tmp_path / "taken" / "file.txt").write_text("x")
     assert pk("new", "probe", "taken", "--no-git")[0] == 1
     assert pk("new", "probe", "taken", "--no-git", "--force")[0] == 0
+
+
+def test_new_with_the_template_name_still_applies_description_and_version(pk, tmp_path):
+    code, out = pk("new", "qcdx", "--no-git", "--description=Template project built on ProjectKit",
+                   "--version=0.3.0")
+    assert code == 0, out
+    cmake = (tmp_path / "qcdx/CMakeLists.txt").read_text()
+    assert re.search(r"project\(qcdx\s+VERSION\s+0\.3\.0", cmake)
+    assert 'DESCRIPTION "Template project built on ProjectKit"' in cmake
+    assert 'description = "Template project built on ProjectKit"' in (tmp_path / "qcdx/conanfile.py").read_text()
+    assert (tmp_path / "qcdx/include/qcdx/core.hpp").is_file()
+
+
+def test_new_keeps_scripts_executable(pk, tmp_path):
+    import os
+
+    if os.name == "nt":
+        return
+    assert pk("new", "probe", "--no-git")[0] == 0
+    for relative in ("scripts/pk.py", "scripts/release.py", "cmake/projectkit/scripts/analyser_launcher.py"):
+        assert os.access(tmp_path / "probe" / relative, os.X_OK), relative
