@@ -14,7 +14,7 @@ inputs:
     description: "'save' restores & saves Conan cache, 'restore' doesn't save."
     default: save
   conan-version:
-    default: '2.32.0'
+    default: '2.33.0'
   llvm-mingw-tag:
     default: '20260616'
   llvm-mingw-asset:
