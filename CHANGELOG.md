@@ -38,6 +38,9 @@ and/or fixes that directly impact users and is not logged in this document.
   [QCDX-template](https://github.com/cooldood155/QCDX-template) as one commit,
   with the template repository's own README, LICENSE and docs. This requires
   the `TEMPLATE_REPO_TOKEN` secret.
+- `pre-commit-config.yaml`: every commit is linted before being staged. The
+  template gets its own pre-commit-config as well, which is optional and can be
+  deleted by users in their new projects if wanted.
 
 ### Fixed
 
