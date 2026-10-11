@@ -1,0 +1,61 @@
+# pre-commit: https://pre-commit.com
+#
+# Nothing runs until the hooks are installed; delete this file if they are not
+# wanted.
+#
+#   pre-commit install          // run the hooks on every commit
+#   pre-commit run --all-files  // run hooks on the whole tree
+#   pre-commit autoupdate       // bumps every rev and re-runs
+#
+# Hooks that fix files (whitespace, line endings, clang-format) fail the
+# commit and leave their fixes unstaged. Review fixes, stage them and commit.
+
+minimum_pre_commit_version: "3.2.0"
+default_install_hook_types: [pre-commit]
+default_stages: [pre-commit, manual]
+
+# Fixing the vendored kits files (belonging to 'pk sync') would turn every
+# 'pk sync' call made afterwards into a merge conflict.
+exclude: ^(cmake/projectkit/|\.github/actions/pk-setup/|scripts/(pk|verify|package|release|bootstrap)\.py$)
+
+repos:
+  # Whitespace, line endings, merge leftovers.
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf] # .gitattributes: eol=lf
+      - id: check-merge-conflict
+      - id: check-case-conflict # Windows/macOS file systems ignore case
+      - id: check-illegal-windows-names
+      - id: check-added-large-files
+        args: [--maxkb=512]
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json # CMakePresets.json, deps.json, conan.lock
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      - id: detect-private-key
+
+  # C and C++: the project's .clang-format (same as 'pk format').
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v23.1.3
+    hooks:
+      - id: clang-format
+        types_or: [c, c++]
+
+  # Python: lint only! Default rules.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.0
+    hooks:
+      - id: ruff-check
+        args: [--select=E4,E7,E9,F]
+
+  # GitHub workflows and actions checked against their JSON schemas.
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.38.2
+    hooks:
+      - id: check-github-workflows
+      - id: check-github-actions
