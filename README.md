@@ -260,6 +260,7 @@ my-project/
 | [`docs/BUILDING.md`](docs/BUILDING.md) | supported platforms, toolchains and cross targets |
 | [`PK.md`](cmake/projectkit/docs/PK.md) | every `pk` command, flag and setting |
 | [`PK_DEP.md`](cmake/projectkit/docs/PK_DEP.md) | `deps.json`, `conan.lock`, `pk dep` and `DEPS_*` |
+| [`RUNNING_PK.md`](docs/RUNNING_PK.md) | Installing, configuring, verifying everything works, and troubleshooting |
 | [`VERIFY.md`](cmake/projectkit/docs/VERIFY.md) | the verification pipeline and its targets |
 | [`RELEASE.md`](cmake/projectkit/docs/RELEASE.md) | tagged releases: targets, archives, checks, signing |
 | [`PACKAGE.md`](cmake/projectkit/docs/PACKAGE.md) | Conan packaging, editable mode and uploads |
