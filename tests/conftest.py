@@ -15,7 +15,8 @@ def pk(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     def run(*args, cwd=None):
-        env = dict(os.environ, PYTHONPATH=str(ROOT / "src"), GIT_CONFIG_GLOBAL=str(tmp_path / "gitconfig"))
+        env = dict(os.environ, PYTHONPATH=str(ROOT / "src"), GIT_CONFIG_GLOBAL=str(tmp_path / "gitconfig"),
+                   PK_HOME=str(tmp_path / "pk-home"))
         result = subprocess.run([sys.executable, "-m", "qcdx", *args], cwd=str(cwd or tmp_path), env=env,
                                 capture_output=True, text=True)
         return result.returncode, result.stdout + result.stderr

@@ -14,7 +14,7 @@ The installed command knows where it runs:
 
 | Where you run it | What `pk` does |
 | --- | --- |
-| Outside any project | `pk new`, `pk --version`, `pk cmake-dir` and `pk help` |
+| Outside any project | `pk new`, `pk list`, `pk --version`, `pk cmake-dir` and `pk help` |
 | Anywhere inside a project | runs that project's own `scripts/pk.py` with the same arguments |
 
 Inside of QCDX kitted project, the pk version the project vendors is the

@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from . import resources
+from . import registry, resources
 
 TEMPLATE_NAME = "qcdx"
 TEMPLATE_DESCRIPTION = "Template project built on ProjectKit"
@@ -212,6 +212,7 @@ def main(argv: List[str]) -> int:
     except NewError as error:
         sys.stderr.write(f"pk new: {error}\n")
         return 1
+    registry.remember(target)
     shown = os.path.relpath(target) if not os.path.relpath(target).startswith("..") else str(target)
     print(f"""
 next:

@@ -13,13 +13,15 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from . import new, resources
+from . import new, registry, resources
 
 HELP = """\
 pk - QCDX {version}: create and build C and C++ projects with CMake and Conan
 
 usage:
   pk new NAME [DIR] [flag...]   create a project ('pk new --help')
+  pk list [--prune]             every project pk knows, --prune refreshes it,
+                                removing old projects
   pk cmake-dir                  print the QCDX CMake package directory, for
                                 -DQCDX_DIR=... or CMAKE_PREFIX_PATH
   pk --version                  QCDX version, and the kit version of this project
@@ -58,6 +60,7 @@ def tool_path(env: dict) -> None:
 
 
 def delegate(project: Path, argv: List[str]) -> int:
+    registry.remember(project)
     env = dict(os.environ, PK_SELF_NAME="pk")
     tool_path(env)
     script = str(project / "scripts" / "pk.py")
@@ -65,6 +68,50 @@ def delegate(project: Path, argv: List[str]) -> int:
         return subprocess.call([sys.executable, script, *argv], env=env)
     except KeyboardInterrupt:
         return 130
+
+
+def list_projects(argv: List[str]) -> int:
+    """'pk list' outside a project: every project known to QCDX pk, most
+    recently used (by gloabl pk) listed first."""
+    prune = False
+    for arg in argv:
+        if arg == "--prune":
+            prune = True
+        else:
+            sys.stderr.write(f"pk list: unknown argument {arg}\nusage: pk list [--prune]\n")
+            return 2
+    try:
+        projects = registry.load()
+    except registry.RegistryError as error:
+        sys.stderr.write(f"pk list: {error}\n")
+        return 1
+
+    missing = [entry["path"] for entry in projects if not registry.exists(Path(entry["path"]))]
+    if prune and missing:
+        registry.forget(missing)
+        for path in missing:
+            print(f"forgot {path}")
+        projects = [entry for entry in projects if entry["path"] not in missing]
+        missing = []
+    if not projects:
+        print(f"no projects yet: 'pk new NAME' creates one, running pk inside a project adds it\n"
+              f"(registry: {registry.registry_file()})")
+        return 0
+
+    rows = []
+    for entry in sorted(projects, key=lambda item: item.get("last_used", ""), reverse=True):
+        path = Path(entry["path"])
+        if entry["path"] in missing:
+            rows.append(("(missing)", "", entry.get("last_used", "")[:10], entry["path"]))
+        else:
+            rows.append((registry.project_name(path) or "?", project_kit_version(path),
+                         entry.get("last_used", "")[:10], entry["path"]))
+    widths = [max(len(row[column]) for row in rows + [("NAME", "KIT", "LAST USED", "")]) for column in range(3)]
+    for row in [("NAME", "KIT", "LAST USED", "PATH")] + rows:
+        print("  ".join(cell.ljust(width) for cell, width in zip(row[:3], widths)) + "  " + row[3])
+    if missing:
+        print(f"\n{len(missing)} missing: moved or deleted, 'pk list --prune' forgets them")
+    return 0
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -93,6 +140,8 @@ def run(argv: List[str]) -> int:
         return 0
     if project is not None:
         return delegate(project, argv)
+    if command == "list":
+        return list_projects(argv[1:])
     if command in ("", "help", "-h", "--help"):
         print(HELP.format(version=resources.version(), where="\n\n(no project here)"))
         return 0

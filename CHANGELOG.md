@@ -33,14 +33,19 @@ and/or fixes that directly impact users and is not logged in this document.
 
 ### Added
 
+- `pk list` outside a project: every project the global `pk` knows, with its
+  name, kit version, last use and path. `pk new` remembers a project, and so
+  does every `pk` command run inside one. Moved or deleted projects show as
+  missing; `pk list --prune` forgets them. The registry is
+  `~/.pk/projects.json` (`PK_HOME` moves it).
+- `pre-commit-config.yaml`: every commit is linted before being staged. The
+  template gets its own pre-commit-config as well, which is optional and can be
+  deleted by users in their new projects if wanted.
 - `template-sync.yml`: after every successful release (or when ran by hand),
   generates the project with `pk new qcdx` and pushes the difference to
   [QCDX-template](https://github.com/cooldood155/QCDX-template) as one commit,
   with the template repository's own README, LICENSE and docs. This requires
   the `TEMPLATE_REPO_TOKEN` secret.
-- `pre-commit-config.yaml`: every commit is linted before being staged. The
-  template gets its own pre-commit-config as well, which is optional and can be
-  deleted by users in their new projects if wanted.
 
 ### Fixed
 
