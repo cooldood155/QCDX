@@ -121,6 +121,8 @@ jobs:
 
           Every file is listed in \`SHA256SUMS\` and has a build provenance attestation:
           \`gh attestation verify FILE -R ${GITHUB_REPOSITORY}\`
+
+          Changes: [\`CHANGELOG.md\`](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/CHANGELOG.md)
           EOF
           flags=(--verify-tag --title "QCDX ${VERSION}" --notes-file notes.md --generate-notes)
           [ "$PRERELEASE" = true ] && flags+=(--prerelease)
