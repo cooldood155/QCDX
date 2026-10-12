@@ -2,8 +2,9 @@ name: template-sync
 
 # Keeps cooldood155/QCDX-template equal to what 'pk new qcdx' creates: after
 # every successful release (and when run by hand) it generates the project from
-# that QCDX commit, adds dev/template-repo/README.md, LICENSE and docs/, and
-# pushes the difference as one commit. Nothing is pushed when nothing changed.
+# that QCDX commit, adds dev/template-repo/README.md, LICENSE, CHANGELOG.md and
+# docs/, and pushes the difference as one commit. Nothing is pushed when
+# nothing changed.
 #
 # One-time setup: a fine-grained personal access token with access to
 # cooldood155/QCDX-template only and "Contents: Read and write", stored in this
@@ -75,6 +76,7 @@ jobs:
             --url="https://github.com/$TEMPLATE_REPO" --license="$LICENSE_ID"
           cp dev/template-repo/README.md "$out/README.md"
           cp LICENSE "$out/LICENSE"
+          cp CHANGELOG.md "$out/CHANGELOG.md"
           cp -R docs "$out/docs"
           echo "describe=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
