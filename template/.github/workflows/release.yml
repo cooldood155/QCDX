@@ -216,26 +216,28 @@ jobs:
             cat "$NOTES"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # The releases repository's README will update to the PK_RELEASE_README
-      # from the commit this release is built from; skipped when unchanged.
-      - name: Sync the releases repository README
-        if: steps.final.outputs.readme != '' && env.RELEASES_REPO != github.repository
+      - name: Sync files to the releases repository
+        if: steps.final.outputs.sync != '' && env.RELEASES_REPO != github.repository
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
-          README: ${{ steps.final.outputs.readme }}
+          SYNC: ${{ steps.final.outputs.sync }}
         run: |
           set -euo pipefail
-          path="repos/$RELEASES_REPO/contents/README.md"
-          local="$(base64 -w0 "$README")"
-          sha=""
-          if remote="$(gh api "$path" 2>/dev/null)"; then
-            sha="$(jq -r .sha <<<"$remote")"
-            if [ "$(jq -r .content <<<"$remote" | tr -d '\n')" = "$local" ]; then
-              echo "README.md is already up to date"
-              exit 0
+          for pair in $SYNC; do
+            source="${pair%%=*}"
+            name="${pair#*=}"
+            path="repos/$RELEASES_REPO/contents/$name"
+            local="$(base64 -w0 "$source")"
+            sha=""
+            if remote="$(gh api "$path" 2>/dev/null)"; then
+              sha="$(jq -r .sha <<<"$remote")"
+              if [ "$(jq -r .content <<<"$remote" | tr -d '\n')" = "$local" ]; then
+                echo "$name is already up to date"
+                continue
+              fi
             fi
-          fi
-          args=(-X PUT "$path" --silent -f "message=Update README for $GITHUB_REF_NAME" -f "content=$local")
-          [ -n "$sha" ] && args+=(-f "sha=$sha")
-          gh api "${args[@]}"
-          echo "README.md updated for $GITHUB_REF_NAME"
+            args=(-X PUT "$path" --silent -f "message=Update $name for $GITHUB_REF_NAME" -f "content=$local")
+            [ -n "$sha" ] && args+=(-f "sha=$sha")
+            gh api "${args[@]}"
+            echo "$name updated for $GITHUB_REF_NAME"
+          done
