@@ -74,6 +74,7 @@ DEFAULTS = {
     "PK_RELEASE_HASH_LINK": "",
     "PK_RELEASE_DRAFT": "ON",
     "PK_RELEASE_README": "",
+    "PK_RELEASE_SYNC": "",
 }
 
 DEFAULT_NOTES = """\
@@ -536,8 +537,19 @@ class Release:
         if readme and not os.path.isfile(os.path.join(self.root, readme)):
             fail(f"PK_RELEASE_README: no file {readme}")
 
+        sync = [f"{readme}=README.md"] if readme else []
+        for relative in commas_to_spaces(self.get("PK_RELEASE_SYNC")):
+            if "=" in relative:
+                fail(f"PK_RELEASE_SYNC: '{relative}' contains '='")
+            if not os.path.isfile(os.path.join(self.root, relative)):
+                fail(f"PK_RELEASE_SYNC: no file {relative}")
+            name = os.path.basename(relative)
+            if any(pair.endswith("=" + name) for pair in sync):
+                fail(f"PK_RELEASE_SYNC: {name} is already synced to the releases repository")
+            sync.append(f"{relative}={name}")
+
         out(notes)
-        gh_output(notes=notes_path, sums=sums, dist=dist, readme=readme,
+        gh_output(notes=notes_path, sums=sums, dist=dist, readme=readme, sync=" ".join(sync),
                   title=f"{self.project} {tag[1:] if tag.startswith('v') else tag}")
         return 0
 
@@ -742,7 +754,7 @@ class Portability:
         return find
 
     def windows(self) -> None:
-        """Ensures PE binaries resolve dependencies and bundles toolchain DLLs 
+        """Ensures PE binaries resolve dependencies and bundles toolchain DLLs
         according to the PK_RELEASE_RUNTIME setting."""
 
         mode = self.release.get("PK_RELEASE_RUNTIME").lower()
