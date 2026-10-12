@@ -20,7 +20,7 @@ builds, tests, installs and packages before you start writting code.
   library.
 - **Checks built in**: warnings, hardening, sanitizers, clang-tidy, cppcheck,
   Valgrind and coverage, each one option away.
-- **`pk`**, one command line for all of it, Conan and CMake never have to be
+- **`pk`**, one command line for all of it, Conan and CMake rarely have to be
   typed by hand.
 
 ## Requirements
