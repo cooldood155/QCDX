@@ -6,7 +6,7 @@
 
 namespace qcdx {
 
-const char* version() noexcept {
+const char *version() noexcept {
     return QCDX_VERSION_STRING;
 }
 

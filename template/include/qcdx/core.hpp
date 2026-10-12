@@ -4,6 +4,6 @@
 
 namespace qcdx {
 
-[[nodiscard]] QCDX_EXPORT const char* version() noexcept;
+[[nodiscard]] QCDX_EXPORT const char *version() noexcept;
 
 } // namespace qcdx
