@@ -67,7 +67,7 @@ function(pk_setup_static_analysis)
     set(clang_tidy_command
       "${${prefix}_CLANG_TIDY_PATH}"
       "--extra-arg=-Wno-unknown-warning-option"
-      "--extra-arg=-Wno-unused-command-line-argument",
+      "--extra-arg=-Wno-unused-command-line-argument"
       "--removed-arg=-fno-keep-inline-dllexport")
 
     if(${prefix}_SA_OUTPUT STREQUAL "files")
