@@ -155,14 +155,18 @@ __pycache__/
 .elc
 
 # ==========================================
+# qcdx (pk)
+# ==========================================
+
+# Release settings; override Visual Studios [Rr]elease/ rule
+!scripts/helpers/release/
+
+# ProjectKit install staging (pk stage, pk install, pk verify)
+stage/
+
+# ==========================================
 # In-Project Deamed Personal Directories
 # ==========================================
 
 docs/archive
 docs/notes
-
-# ProjectKit install staging (pk stage, pk install, pk verify)
-stage/
-
-# Release settings; override the Visual Studio [Rr]elease/ rule
-!scripts/helpers/release/
