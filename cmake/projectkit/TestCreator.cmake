@@ -1,5 +1,28 @@
 include_guard(GLOBAL)
 
+# MinGW's runtime DLLs (libstdc++, libgcc, winpthread) are next to the
+# compiler. Windows looks for DLLs through PATH, an old copy listed first by
+# the shell will fail to load with 0xc0000139. MSVC and non-Windows platforms
+# skip this!
+function(pk_toolchain_dll_dirs out_var)
+  set(dirs "")
+
+  if(CMAKE_HOST_WIN32 AND WIN32 AND NOT MSVC)
+    if(CMAKE_CXX_COMPILER)
+      set(compiler "${CMAKE_CXX_COMPILER}")
+    else()
+      set(compiler "${CMAKE_C_COMPILER}")
+    endif()
+
+    if(compiler)
+      get_filename_component(compiler_dir "${compiler}" DIRECTORY)
+      list(APPEND dirs "${compiler_dir}")
+    endif()
+  endif()
+
+  set(${out_var} "${dirs}" PARENT_SCOPE)
+endfunction()
+
 function(pk_create_test)
   set(options
     NO_DEFAULT_LINKS
@@ -85,6 +108,12 @@ function(pk_create_test)
     set(default_links "")
   endif()
 
+  pk_toolchain_dll_dirs(dll_dirs)
+  set(discover_args "")
+  if(dll_dirs)
+    list(APPEND discover_args DL_PATHS ${dll_dirs})
+  endif()
+
   foreach(library IN LISTS library_variants)
     if(library MATCHES "_static$")
       set(test_target "${ARG_NAME}_tests_static")
@@ -130,7 +159,8 @@ function(pk_create_test)
       catch_discover_tests(${test_target}
         TEST_PREFIX "${test_target}: "
         PROPERTIES LABELS "${ARG_LABEL}"
-        DISCOVERY_MODE PRE_TEST)
+        DISCOVERY_MODE PRE_TEST
+        ${discover_args})
 
       if(NOT ARG_NO_VALGRIND)
         pk_add_valgrind_test(${test_target})
