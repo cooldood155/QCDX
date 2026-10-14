@@ -6,6 +6,7 @@ set(PK_MODULE_DIR "${CMAKE_CURRENT_LIST_DIR}" CACHE INTERNAL
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
+include("${CMAKE_CURRENT_LIST_DIR}/Layout.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/ProjectSetup.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/Dependencies.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/CompilerWarnings.cmake")
