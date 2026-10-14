@@ -85,6 +85,8 @@ jobs:
           "$PY39" "$pyz" new probe --no-git
           "$PY39" "$pyz" cmake-dir
           test -f probe/CMakeLists.txt
+          "$PY39" "$pyz" new probe probe-minimal --no-git --tree=minimal
+          test -f probe-minimal/.pk/tree.conf
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -148,6 +150,26 @@ jobs:
             echo "$changed"
           fi
 
+      # The minimal tree: the kit, scripts, settings and profiles in .pk/,
+      # tools, clangd and pre-commit left out. It must build exactly the same.
+      - name: pk new --tree=minimal, build, test, run, stage
+        run: |
+          set -euo pipefail
+          cd "$HOME/qcdx-smoke"
+          pk new comet --tree=minimal --description="Minimal tree smoke test" --license=MIT
+          cd comet
+          test -f .pk/tree.conf && test ! -e tools && test ! -e cmake && test ! -e scripts
+          pk tree check
+          pk test release
+          pk run release
+          pk stage release
+          test -f stage/include/comet/core.hpp
+          changed="$(git status --porcelain --untracked-files=no)"
+          if [ -n "$changed" ]; then
+            echo "::warning::building changed tracked files:"
+            echo "$changed"
+          fi
+
       - name: pk.pyz new
         run: |
           set -euo pipefail
@@ -156,6 +178,9 @@ jobs:
           python "$pyz" new probe --no-git
           test -f probe/CMakeLists.txt
           test -x probe/scripts/pk.py || [ "$RUNNER_OS" = Windows ]
+          python "$pyz" new probe probe-minimal --no-git --tree=minimal
+          test -f probe-minimal/.pk/tree.conf
+          test -x probe-minimal/.pk/scripts/pk.py || [ "$RUNNER_OS" = Windows ]
 
   # The kit as a CMake package (install + find_package, FetchContent from the
   # sdist) and as a Conan package (conan create runs conan/test_package).
