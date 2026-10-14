@@ -58,9 +58,10 @@ macro(pk_setup_tooling)
         "--track-origins=yes")
     endif()
 
-    if(EXISTS "${PROJECT_SOURCE_DIR}/tests/valgrind.supp")
+    pk_tree_dir(_pk_tests_dir tests)
+    if(EXISTS "${_pk_tests_dir}/valgrind.supp")
       list(APPEND _pk_valgrind_command
-        "--suppressions=${PROJECT_SOURCE_DIR}/tests/valgrind.supp")
+        "--suppressions=${_pk_tests_dir}/valgrind.supp")
     endif()
 
     list(APPEND _pk_tooling_labels valgrind)

@@ -69,7 +69,7 @@ function(pk_add_library_targets NAME)
 endfunction()
 
 function(pk_configure_libraries)
-  set(one_value_args BASE_NAME LANGUAGE EXPORT_HEADER)
+  set(one_value_args BASE_NAME LANGUAGE EXPORT_HEADER PUBLIC_BASE_DIR PRIVATE_BASE_DIR)
   set(multi_value_args
     PUBLIC_HEADERS
     PRIVATE_HEADERS
@@ -94,6 +94,12 @@ function(pk_configure_libraries)
 
   if(NOT ARG_LANGUAGE)
     set(ARG_LANGUAGE "CXX")
+  endif()
+  if(NOT ARG_PUBLIC_BASE_DIR)
+    pk_tree_dir(ARG_PUBLIC_BASE_DIR headers)
+  endif()
+  if(NOT ARG_PRIVATE_BASE_DIR)
+    pk_tree_dir(ARG_PRIVATE_BASE_DIR sources)
   endif()
 
   set(BASE_NAME "${ARG_BASE_NAME}")
@@ -126,7 +132,7 @@ function(pk_configure_libraries)
         ${pub}
           FILE_SET    ${BASE_NAME}_headers
           TYPE        HEADERS
-          BASE_DIRS   "${PROJECT_SOURCE_DIR}/include"
+          BASE_DIRS   "${ARG_PUBLIC_BASE_DIR}"
           FILES       ${ARG_PUBLIC_HEADERS})
     endif()
 
@@ -141,7 +147,7 @@ function(pk_configure_libraries)
         PRIVATE
           FILE_SET    ${BASE_NAME}_private_headers
           TYPE        HEADERS
-          BASE_DIRS   "${PROJECT_SOURCE_DIR}/src"
+          BASE_DIRS   "${ARG_PRIVATE_BASE_DIR}"
           FILES       ${ARG_PRIVATE_HEADERS})
     endif()
 
@@ -344,7 +350,8 @@ function(pk_create_library)
     endif()
     set(source_dir_given TRUE)
   elseif(NOT ARG_VERBATIM AND ARG_KIND MATCHES "^(AUTO|COMPILED)$")
-    set(ARG_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/${ARG_NAME}")
+    pk_tree_dir(sources_dir sources)
+    set(ARG_SOURCE_DIR "${sources_dir}/${ARG_NAME}")
   else()
     message(STATUS
       "${PROJECT_NAME}: No source directory provided for library target '${ARG_NAME}'.")
@@ -362,7 +369,8 @@ function(pk_create_library)
     endif()
     set(include_dir_given TRUE)
   elseif(NOT ARG_VERBATIM AND NOT ARG_KIND STREQUAL "INTERFACE")
-    set(ARG_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/include/${ARG_NAME}")
+    pk_tree_dir(headers_dir headers)
+    set(ARG_INCLUDE_DIR "${headers_dir}/${ARG_NAME}")
   else()
     message(STATUS
       "${PROJECT_NAME}: No include directory provided for library target '${ARG_NAME}'.")
@@ -505,6 +513,17 @@ function(pk_create_library)
       EXPORT_FILE_NAME "${export_header}")
   endif()
 
+  if(ARG_INCLUDE_DIR)
+    pk_tree_base_dir(public_base_dir headers "${ARG_INCLUDE_DIR}")
+  else()
+    pk_tree_dir(public_base_dir headers)
+  endif()
+  if(ARG_SOURCE_DIR)
+    pk_tree_base_dir(private_base_dir sources "${ARG_SOURCE_DIR}")
+  else()
+    pk_tree_dir(private_base_dir sources)
+  endif()
+
   if(ARG_NO_DEFAULT_LINKS)
     set(default_links NO_DEFAULT_LINKS)
   else()
@@ -517,6 +536,8 @@ function(pk_create_library)
     LANGUAGE "${language}"
     SOURCE_LANGUAGES ${source_languages}
     EXPORT_HEADER "${export_header}"
+    PUBLIC_BASE_DIR "${public_base_dir}"
+    PRIVATE_BASE_DIR "${private_base_dir}"
     PUBLIC_HEADERS ${ARG_PUBLIC_HEADERS}
     PRIVATE_HEADERS ${ARG_PRIVATE_HEADERS})
 

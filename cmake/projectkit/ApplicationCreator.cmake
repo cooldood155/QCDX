@@ -107,7 +107,8 @@ function(pk_create_app)
     endif()
     set(source_dir_given TRUE)
   elseif(ARG_DEFAULT_DIRS)
-    set(ARG_SOURCE_DIR "${PROJECT_SOURCE_DIR}/apps/${ARG_NAME}")
+    pk_tree_dir(apps_dir apps)
+    set(ARG_SOURCE_DIR "${apps_dir}/${ARG_NAME}")
   else()
     set(ARG_SOURCE_DIR "")
   endif()
@@ -196,6 +197,17 @@ function(pk_create_app)
   set(std_C "c_std_${${prefix}_C_STANDARD}")
   set(std_CXX "cxx_std_${${prefix}_CXX_STANDARD}")
 
+  if(ARG_INCLUDE_DIR)
+    pk_tree_base_dir(public_base_dir headers "${ARG_INCLUDE_DIR}")
+  else()
+    pk_tree_dir(public_base_dir headers)
+  endif()
+  if(ARG_SOURCE_DIR)
+    pk_tree_base_dir(private_base_dir apps "${ARG_SOURCE_DIR}")
+  else()
+    pk_tree_dir(private_base_dir apps)
+  endif()
+
   foreach(target output IN ZIP_LISTS ARG_TARGET_NAME ARG_OUTPUT_NAME)
     add_executable(${target} ${ARG_SOURCES})
 
@@ -207,7 +219,7 @@ function(pk_create_app)
         PRIVATE
           FILE_SET    ${ARG_NAME}_app_public_headers
           TYPE        HEADERS
-          BASE_DIRS   "${PROJECT_SOURCE_DIR}/include"
+          BASE_DIRS   "${public_base_dir}"
           FILES       ${ARG_PUBLIC_HEADERS})
     endif()
 
@@ -216,7 +228,7 @@ function(pk_create_app)
         PRIVATE
           FILE_SET    ${ARG_NAME}_app_private_headers
           TYPE        HEADERS
-          BASE_DIRS   "${PROJECT_SOURCE_DIR}/apps"
+          BASE_DIRS   "${private_base_dir}"
           FILES       ${ARG_PRIVATE_HEADERS})
     endif()
 
