@@ -29,6 +29,7 @@ from functools import lru_cache
 from typing import List, Optional, Tuple
 
 from . import targets
+from . import tree as pktree
 from .common import (BUILD_TYPES, SCRIPTS_DIR, C, capture, confirm, entry, err, exit_code, flush, has_file,
                      have, host_arch, host_platform, lines, load_conf, native_path, out, output, remove,
                      repo_root, run, script_env, setup_output, shown, walk_files)
@@ -56,7 +57,7 @@ COMMANDS = (
     ("inspect", "status", "st", "", "show build trees, their options and dependency state"),
     ("inspect", "list", "ls", "", "list build types, apps, cross targets and presets"),
     ("inspect", "doctor", "", "", "check tools and environment (--fix to repair)"),
-    ("project and shell", "sync", "", "upgrade", "update cmake/projectkit from the QCDX template"),
+    ("project and shell", "sync", "", "upgrade", "update the kit (projectkit, scripts) from the QCDX template"),
     ("project and shell", "rename", "", "bootstrap", "rename a project made from the template"),
     ("project and shell", "help", "", "", "show help ('help <command>' for one command)"),
     ("project and shell", "shell-init", "", "", "print a 'pk' function + completion for bash or PowerShell"),
@@ -125,33 +126,44 @@ VALUE_FLAGS = {
 STATUS_OPTIONS = ("BUILD_TESTS", "BUILD_APPS", "LIBRARY_TYPE", "WERROR", "SANITIZE", "SA_ALL", "LTO",
                   "COVERAGE", "VALGRIND")
 STAMP_NAME = "pk-deps.stamp"
-SYNC_STATE = "scripts/helpers/pk/upstream.conf"
+SYNC_STATE = "scripts/helpers/pk/upstream.conf"  # in the classic tree; Pk.sync_state follows the tree
 UPSTREAM_REF = "refs/projectkit/upstream"
 PRESETS_SCRIPT = os.path.join(SCRIPTS_DIR, "helpers", "pk", "presets.cmake")
 DEPS_SCRIPT = os.path.join(SCRIPTS_DIR, "helpers", "pk", "deps.py")
 
 
-BASH_INIT = r"""# projectkit 'pk': runs the nearest scripts/pk.py from anywhere in a project.
-pk() {
-  local dir="$PWD"
+BASH_INIT = r"""# projectkit 'pk': runs the nearest project's pk.py from anywhere in a project.
+# The scripts folder is scripts/, or wherever .pk/tree.conf puts it.
+__pk_script() {
+  local dir="$PWD" scripts
   while [ "$dir" != "/" ]; do
-    if [ -f "$dir/scripts/pk.py" ]; then
-      PK_SELF_NAME=pk "${PK_PYTHON:-@PYTHON@}" "$dir/scripts/pk.py" "$@"
-      return $?
+    scripts=scripts
+    if [ -f "$dir/.pk/tree.conf" ]; then
+      scripts="$(awk -F= 'tolower($1) ~ /^[ \t]*(pk_tree_)?scripts[ \t]*$/ { v = $2 }
+        END { gsub(/["\r]/, "", v); gsub(/^[ \t]+|[ \t]+$/, "", v); print v }' "$dir/.pk/tree.conf")"
+    fi
+    if [ -n "$scripts" ] && [ -f "$dir/$scripts/pk.py" ]; then
+      printf '%s\n' "$dir/$scripts/pk.py"
+      return 0
     fi
     dir="$(dirname "$dir")"
   done
-  echo "pk: no scripts/pk.py in $PWD or above" >&2
+  return 1
+}
+
+pk() {
+  local script
+  if script="$(__pk_script)"; then
+    PK_SELF_NAME=pk "${PK_PYTHON:-@PYTHON@}" "$script" "$@"
+    return $?
+  fi
+  echo "pk: no project (scripts/pk.py) in $PWD or above" >&2
   return 2
 }
 
 _pk_complete() {
-  local dir="$PWD" script=""
-  while [ "$dir" != "/" ]; do
-    [ -f "$dir/scripts/pk.py" ] && { script="$dir/scripts/pk.py"; break; }
-    dir="$(dirname "$dir")"
-  done
-  [ -n "$script" ] || return 0
+  local script
+  script="$(__pk_script)" || return 0
   local cur="${COMP_WORDS[COMP_CWORD]}" command=""
   [ "$COMP_CWORD" -gt 1 ] && command="${COMP_WORDS[1]}"
   local IFS=$'\n'
@@ -159,32 +171,40 @@ _pk_complete() {
 }
 complete -o default -F _pk_complete pk"""
 
-POWERSHELL_INIT = r"""# projectkit 'pk': runs the nearest scripts\pk.py from anywhere in a project.
-function pk {
+POWERSHELL_INIT = r"""# projectkit 'pk': runs the nearest project's pk.py from anywhere in a project.
+# The scripts folder is scripts\, or wherever .pk\tree.conf puts it.
+function __pk_script {
   $dir = (Get-Location).ProviderPath
   while ($dir) {
-    $script = Join-Path $dir 'scripts\pk.py'
-    if (Test-Path -LiteralPath $script -PathType Leaf) {
-      $python = $env:PK_PYTHON
-      if (-not $python) { $python = '@PYTHON@' }
-      $env:PK_SELF_NAME = 'pk'
-      try { & $python $script @args } finally { Remove-Item Env:\PK_SELF_NAME -ErrorAction SilentlyContinue }
-      return
+    $scripts = 'scripts'
+    $conf = Join-Path $dir '.pk\tree.conf'
+    if (Test-Path -LiteralPath $conf -PathType Leaf) {
+      foreach ($line in Get-Content -LiteralPath $conf) {
+        if ($line -match '^\s*(PK_TREE_)?scripts\s*=\s*(.*?)\s*$') { $scripts = $Matches[2].Trim('"') }
+      }
     }
+    $script = Join-Path $dir (Join-Path $scripts 'pk.py')
+    if ($scripts -and (Test-Path -LiteralPath $script -PathType Leaf)) { return $script }
     $dir = Split-Path -Parent $dir
   }
-  Write-Error "pk: no scripts\pk.py in $PWD or above"
+  return $null
+}
+
+function pk {
+  $script = __pk_script
+  if ($script) {
+    $python = $env:PK_PYTHON
+    if (-not $python) { $python = '@PYTHON@' }
+    $env:PK_SELF_NAME = 'pk'
+    try { & $python $script @args } finally { Remove-Item Env:\PK_SELF_NAME -ErrorAction SilentlyContinue }
+    return
+  }
+  Write-Error "pk: no project (scripts\pk.py) in $PWD or above"
 }
 
 Register-ArgumentCompleter -Native -CommandName pk -ScriptBlock {
   param($wordToComplete, $commandAst, $cursorPosition)
-  $dir = (Get-Location).ProviderPath
-  $script = $null
-  while ($dir) {
-    $candidate = Join-Path $dir 'scripts\pk.py'
-    if (Test-Path -LiteralPath $candidate -PathType Leaf) { $script = $candidate; break }
-    $dir = Split-Path -Parent $dir
-  }
+  $script = __pk_script
   if (-not $script) { return }
   $python = $env:PK_PYTHON
   if (-not $python) { $python = '@PYTHON@' }
@@ -197,6 +217,12 @@ Register-ArgumentCompleter -Native -CommandName pk -ScriptBlock {
     Where-Object { $_ -like "$wordToComplete*" } |
     ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }
 }"""
+
+
+def die_tree(error: Exception) -> None:
+    err(f"{C.red}pk{C.reset}: the project tree (.pk/tree.conf) is broken: {error}")
+    err("  'pk tree check' explains it; 'pk tree reset' goes back to the last tree that worked")
+    raise SystemExit(2)
 
 
 def parse_type(word: str) -> Optional[str]:
@@ -261,19 +287,30 @@ class Pk:
         self.root = root
         self.orig_pwd = os.getcwd()
         self.v = Verify(root)
-        conf = load_conf(root, "scripts/helpers/pk/pk.conf")
-        self.self_name = os.environ.get("PK_SELF_NAME") or "./scripts/pk.py"
+        try:
+            self.layout = pktree.load(root)
+        except pktree.TreeError as error:
+            die_tree(error)
+        missing = self.layout.missing(root, required_only=True)
+        if missing:
+            die_tree(pktree.TreeError("it does not match the files:\n  " + "\n  ".join(missing)))
+        conf = load_conf(root, self.layout.rel("helpers", "pk/pk.conf"))
+        self.self_name = os.environ.get("PK_SELF_NAME") or "./" + self.layout.rel("scripts", "pk.py")
         self.default_type = conf.get("PK_DEFAULT_TYPE", "Debug")
         self.default_jobs = conf.get("PK_DEFAULT_JOBS")
         self.stage_dir = conf.get("PK_STAGE_DIR", "stage")
         self.native_profile = conf.get("PK_NATIVE_PROFILE", "native")
-        self.format_exclude = conf.get("PK_FORMAT_EXCLUDE", "cmake/projectkit/ build/ stage/ _install/").split()
+        self.format_exclude = conf.get("PK_FORMAT_EXCLUDE",
+                                       f"{self.layout.rel('kit')}/ build/ stage/ _install/").split()
         self.upstream_url = conf.get("PK_UPSTREAM_URL", "https://github.com/cooldood155/QCDX.git")
         self.upstream_branch = conf.get("PK_UPSTREAM_BRANCH", "main")
+        # QCDX paths of the kit; sync_pairs maps each to where it is here.
         self.sync_paths = conf.get(
             "PK_SYNC_PATHS",
             ("cmake/projectkit scripts/pk.py scripts/verify.py scripts/package.py scripts/release.py "
              "scripts/bootstrap.py .github/actions/pk-setup")).split()
+        self.sync_pairs = self.map_sync_paths(self.sync_paths)
+        self.sync_state = self.layout.rel("helpers", "pk/upstream.conf")
 
         self.cmd = ""
         self.type = ""
@@ -392,13 +429,14 @@ class Pk:
         return {
             "type": "Debug (default), Release, RelWithDebInfo or MinSizeRel; a bare word works too: "
                     "'build release', 'test rwd'",
-            "cross": f"cross-compile with profiles/NAME and its presets, see '{self.self_name} list'",
+            "cross": f"cross-compile with {self.layout.rel('profiles')}/NAME and its presets, "
+                     f"see '{self.self_name} list'",
             "variant": "use a separate tree build/<preset>-NAME that remembers its own options",
             "update": "re-run Conan even when the dependencies look current",
             "dry": "print every command without running anything",
             "verbose": "show full compiler and linker command lines",
             "tests": "build the test suite; off by default, 'test' turns it on",
-            "apps": "build the applications under apps/",
+            "apps": f"build the applications under {self.layout.rel('apps')}/",
             "lib": "library artifacts: static, shared, both or none",
             "werror": "treat compiler warnings as errors",
             "lto": "link-time optimization",
@@ -472,8 +510,10 @@ class Pk:
             "release": [f"{s} release list", f"{s} release stage linux-x86_64", f"{s} release pack linux-x86_64"],
             "rename": [f"{s} rename myproject --dry-run"],
             "shell-init": [
-                f'eval "$(python3 {native_path(self.root)}/scripts/pk.py shell-init)"    # once, in ~/.bashrc',
-                f"python {self.root}\\scripts\\pk.py shell-init powershell | Out-String | Invoke-Expression"
+                f'eval "$(python3 {native_path(self.root)}/{self.layout.rel("scripts", "pk.py")} shell-init)"'
+                "    # once, in ~/.bashrc",
+                f"python {self.root}\\{self.layout.rel('scripts', 'pk.py').replace('/', chr(92))} shell-init powershell"
+                " | Out-String | Invoke-Expression"
                 "    # once, in $PROFILE"],
         }
         return table.get(command, [])
@@ -491,11 +531,11 @@ class Pk:
             "format": [f"Formats tracked and new (not ignored) files; skips {' '.join(self.format_exclude)}"],
             "clean": ["Without flags only the selected build tree goes; Conan output is kept so the",
                       "next build does not reinstall anything. For everything, use full-clean."],
-            "sync": [f"Brings the template's kit changes into this project: {' '.join(self.sync_paths)}.",
+            "sync": [f"Brings the template's kit changes into this project: {' '.join(p for _, p in self.sync_pairs)}.",
                      "Only the template's changes since the last sync are applied, as a 3-way",
                      "merge, so changes you made to the kit here are kept; where both sides",
                      "changed the same lines you get conflict markers to resolve. The result is",
-                     f"one commit that touches only those paths plus {SYNC_STATE}, which",
+                     f"one commit that touches only those paths plus {self.sync_state}, which",
                      "records the template URL, branch and commit for the next sync. The first",
                      "sync finds the template commit this kit matches by itself.",
                      "Needs: no staged changes, no uncommitted changes in those paths. Your",
@@ -677,12 +717,14 @@ class Pk:
             if preset == "native-debug" or preset == "host-tools" or not preset.endswith("-debug"):
                 continue
             name = preset[:-len("-debug")]
-            if os.path.isfile(os.path.join(self.root, "profiles", name)):
+            if os.path.isfile(self.layout.path(self.root, "profiles", name)):
                 names.append(name)
         return names
 
     def app_names(self) -> List[str]:
-        apps = os.path.join(self.root, "apps")
+        if not self.layout.has("apps"):
+            return []
+        apps = self.layout.path(self.root, "apps")
         if not os.path.isdir(apps):
             return []
         return sorted(name for name in os.listdir(apps) if os.path.isdir(os.path.join(apps, name)))
@@ -700,8 +742,9 @@ class Pk:
         if self.cross:
             if self.cross.startswith("cross-"):
                 self.cross = self.cross[len("cross-"):]
-            if not os.path.isfile(os.path.join(self.root, "profiles", self.cross)):
-                self.usage_die(f"no profiles/{self.cross}; cross targets here: {' '.join(self.cross_names())}")
+            if not os.path.isfile(self.layout.path(self.root, "profiles", self.cross)):
+                self.usage_die(f"no {self.layout.rel('profiles', self.cross)}; cross targets here: "
+                               f"{' '.join(self.cross_names())}")
             self.preset = f"{self.cross}-{self.type_lower}"
         else:
             self.preset = f"native-{self.type_lower}"
@@ -729,7 +772,7 @@ class Pk:
     def deps_key(self, host_profile: str) -> str:
         checksum = 0
         for name in ("conanfile.py", "conanfile.txt", "deps.json", "conan.lock",
-                     f"profiles/{self.native_profile}", host_profile):
+                     self.layout.rel("profiles", self.native_profile), host_profile):
             if name and os.path.isfile(name):
                 with open(name, "rb") as file:
                     checksum = zlib.crc32(file.read(), checksum)
@@ -750,7 +793,7 @@ class Pk:
 
     def ensure_deps(self, build_type: str, cross: str, conan_dir: str, toolchain: str,
                     want_tests: bool) -> None:
-        host_profile = f"profiles/{cross}" if cross else ""
+        host_profile = self.layout.rel("profiles", cross) if cross else ""
         label = f"cross {cross}" if cross else "native"
         want_tests = want_tests and not cross
 
@@ -763,7 +806,7 @@ class Pk:
         self.step(f"deps {build_type} ({label}): {why}")
 
         args = [f"--build_type={build_type}"]
-        if os.path.isfile(os.path.join("profiles", self.native_profile)):
+        if os.path.isfile(self.layout.rel("profiles", self.native_profile)):
             args.append(f"--profile={self.native_profile}")
         if cross:
             args.append(f"--host-profile={cross}")
@@ -941,6 +984,8 @@ class Pk:
 
     def cmd_test(self) -> int:
         self.no_positionals()
+        if not self.layout.has("tests"):
+            self.die("this project's tree leaves the tests out ('pk tree' shows it)")
         self.prepare(True, False)
         self.build()
         return self.ctest()
@@ -964,7 +1009,7 @@ class Pk:
             if len(apps) == 1:
                 app = apps[0]
             elif not apps:
-                self.die("no apps/ directories found, name the executable: run NAME")
+                self.die(f"no {self.layout.rel('apps')}/ directories found, name the executable: run NAME")
             else:
                 self.usage_die(f"several apps, pick one: {' '.join(apps)}")
         if self.cross:
@@ -1058,7 +1103,7 @@ class Pk:
         root = self.root
         candidates = self.v.clean_paths() + [
             os.path.join(root, self.stage_dir),
-            os.path.join(root, "cmake", "projectkit", "test_package", "build"),
+            self.layout.path(root, "kit", "test_package", "build"),
             os.path.join(root, ".cache", "clangd"),
             os.path.join(root, "CMakeUserPresets.json"),
             os.path.join(root, "ConanPresets.json"),
@@ -1241,9 +1286,26 @@ class Pk:
             out(f"report: {stage}/pk-stage.txt")
         return 0 if failed == 0 else 1
 
+    def map_sync_paths(self, paths: List[str]) -> List[Tuple[str, str]]:
+        """(QCDX path, path here) for each synced path. QCDX has the classic
+        tree; a kit part this project left out (pk-setup without CI) is skipped."""
+        known = dict(pktree.sync_map(self.layout))
+        pairs = []
+        for path in paths:
+            path = path.strip("/")
+            if path == pktree.PK_SETUP and path not in known:
+                continue
+            for up, here in sorted(known.items(), key=lambda pair: -len(pair[0])):
+                if path == up or path.startswith(up + "/"):
+                    pairs.append((path, here + path[len(up):]))
+                    break
+            else:
+                pairs.append((path, path))
+        return pairs
+
     def state_get(self, key: str) -> str:
         try:
-            with open(SYNC_STATE, encoding="utf-8") as file:
+            with open(self.sync_state, encoding="utf-8") as file:
                 for line in file:
                     if line.startswith(f"{key}="):
                         return line.rstrip("\r\n")[len(key) + 1:]
@@ -1252,8 +1314,8 @@ class Pk:
         return ""
 
     def state_write(self, url: str, branch: str, commit: str) -> None:
-        os.makedirs(os.path.dirname(SYNC_STATE), exist_ok=True)
-        with open(SYNC_STATE, "w", encoding="utf-8", newline="\n") as file:
+        os.makedirs(os.path.dirname(self.sync_state), exist_ok=True)
+        with open(self.sync_state, "w", encoding="utf-8", newline="\n") as file:
             file.write('# Written by "pk sync": the template cmake/projectkit comes from and\n'
                        "# the template commit it was last synced to. Keep it committed.\n"
                        f"url={url}\nbranch={branch}\ncommit={commit}\n")
@@ -1276,30 +1338,79 @@ class Pk:
 
     def detect_base(self, tip: str) -> Optional[Tuple[str, int]]:
         best: Optional[Tuple[str, int]] = None
-        for commit in lines(["git", "rev-list", "--max-count=500", tip, "--", *self.sync_paths]):
-            changed = 0
-            for row in lines(["git", "diff", "--numstat", commit, "HEAD", "--", *self.sync_paths]):
-                fields = row.split("\t")
-                if len(fields) >= 2 and fields[0] != "-":
-                    changed += int(fields[0]) + int(fields[1])
+        upstream = [up for up, _ in self.sync_pairs]
+        for commit in lines(["git", "rev-list", "--max-count=500", tip, "--", *upstream]):
+            changed = self.kit_difference(commit)
             if best is None or changed < best[1]:
                 best = (commit, changed)
             if changed == 0:
                 break
         return best
 
+    def kit_difference(self, commit: str) -> int:
+        """Lines that differ between the kit of a QCDX commit and the kit here
+        (HEAD), path by path, so a kit that lives elsewhere still compares."""
+        changed = 0
+        for up, here in self.sync_pairs:
+            left, right = f"{commit}:{up}", f"HEAD:{here}"
+            left_ok, right_ok = self.git_ok("cat-file", "-e", left), self.git_ok("cat-file", "-e", right)
+            if not left_ok or not right_ok:
+                changed += 0 if left_ok == right_ok else 100000  # only on one side: never a match
+                continue
+            for row in lines(["git", "diff", "--numstat", left, right]):
+                fields = row.split("\t")
+                if len(fields) >= 2 and fields[0] != "-":
+                    changed += int(fields[0]) + int(fields[1])
+        return changed
+
+    def differing_kit_files(self, commit: str) -> List[str]:
+        found = []
+        for up, here in self.sync_pairs:
+            folder = output(["git", "cat-file", "-t", f"HEAD:{here}"]) == "tree"
+            for name in lines(["git", "diff", "--name-only", f"{commit}:{up}", f"HEAD:{here}"]):
+                found.append(f"{here}/{name}" if folder and name else here)
+        return sorted(set(found))
+
+    def map_patch(self, patch: str) -> None:
+        """Rewrite the QCDX paths in a 'git diff' to where the kit lives here."""
+        def mapped(path: str) -> str:
+            for up, here in sorted(self.sync_pairs, key=lambda pair: -len(pair[0])):
+                if path == up or path.startswith(up + "/"):
+                    return here + path[len(up):]
+            return path
+
+        header = re.compile(rb"^(diff --git a/)(\S+)( b/)(\S+)$|^(--- a/|\+\+\+ b/)(\S+)$|"
+                            rb"^(rename from |rename to |copy from |copy to )(\S+)$")
+        with open(patch, "rb") as file:
+            text = file.read().split(b"\n")
+        result = []
+        for line in text:
+            match = header.match(line)
+            if match is None:
+                result.append(line)
+            elif match.group(1):
+                result.append(match.group(1) + mapped(match.group(2).decode()).encode() + match.group(3)
+                              + mapped(match.group(4).decode()).encode())
+            elif match.group(5):
+                result.append(match.group(5) + mapped(match.group(6).decode()).encode())
+            else:
+                result.append(match.group(7) + mapped(match.group(8).decode()).encode())
+        with open(patch, "wb") as file:
+            file.write(b"\n".join(result))
+
     def short_log(self, commit: str) -> str:
         return output(["git", "log", "-1", "--format=%h %s", commit])
 
     def sync_run(self, patch: str) -> int:
-        paths = self.sync_paths
+        paths = [up for up, _ in self.sync_pairs]
+        here = [local for _, local in self.sync_pairs]
         if not self.git_ok("rev-parse", "--verify", "-q", "HEAD"):
             self.die("sync needs at least one commit in this repository")
         if self.git_ok("rev-parse", "--verify", "-q", "MERGE_HEAD"):
             self.die("finish the merge in progress first")
         if not self.git_ok("diff", "--cached", "--quiet"):
             self.die("you have staged changes: commit or unstage them first, so the sync commit holds only the kit")
-        dirty = lines(["git", "status", "--porcelain", "--", *paths, SYNC_STATE])
+        dirty = lines(["git", "status", "--porcelain", "--", *here, self.sync_state])
         if dirty:
             for line in dirty:
                 err(f"  {line}")
@@ -1348,7 +1459,7 @@ class Pk:
             self.info(f"base: {self.short_log(base)}")
             if changed > 0:
                 self.info(f"{changed} lines of the kit here differ from it and are kept, in:")
-                for path in lines(["git", "diff", "--name-only", base, "HEAD", "--", *paths]):
+                for path in self.differing_kit_files(base):
                     out(f"    {path}")
                 self.info(f"if that base is wrong, pass --base with the right {name} commit")
 
@@ -1358,20 +1469,20 @@ class Pk:
         if self.git_ok("diff", "--quiet", base, tip, "--", *paths):
             self.info(f"kit is up to date with {name} {short}")
             if state_commit and not self.git_ok("merge-base", "--is-ancestor", state_commit, tip):
-                self.info(f"{SYNC_STATE} keeps {state_commit[:7]}, which is newer than {url} {branch}")
+                self.info(f"{self.sync_state} keeps {state_commit[:7]}, which is newer than {url} {branch}")
                 return 0
             if state_commit != tip or state_url != remembered:
                 if self.dry_run:
-                    self.info(f"dry run: would record {name} {short} in {SYNC_STATE}")
+                    self.info(f"dry run: would record {name} {short} in {self.sync_state}")
                     return 0
                 self.state_write(remembered, branch, tip)
-                run(["git", "add", SYNC_STATE])
+                run(["git", "add", self.sync_state])
                 if not self.no_commit:
                     if self.run(["git", "commit", "-q", "-m", f"Record projectkit upstream {name} {short}"]):
                         self.die("commit failed; the change is staged, commit it yourself")
-                    self.info(f"recorded {name} {short} in {SYNC_STATE}")
+                    self.info(f"recorded {name} {short} in {self.sync_state}")
                 else:
-                    self.info(f"staged {SYNC_STATE}; commit it when ready")
+                    self.info(f"staged {self.sync_state}; commit it when ready")
             return 0
 
         self.step(f"{name} changes since {output(['git', 'rev-parse', '--short', base])}")
@@ -1379,6 +1490,7 @@ class Pk:
         flush()
         with open(patch, "wb") as file:
             subprocess.run(["git", "diff", "--full-index", "--binary", base, tip, "--", *paths], stdout=file)
+        self.map_patch(patch)
         for line in capture(["git", "apply", "--stat", patch])[1].splitlines():
             out(f" {line}")
 
@@ -1391,7 +1503,7 @@ class Pk:
         apply_failed = run(["git", "apply", "--3way", "--whitespace=nowarn", patch]) != 0
 
         self.state_write(remembered, branch, tip)
-        run(["git", "add", SYNC_STATE])
+        run(["git", "add", self.sync_state])
         message = f"Sync projectkit from {name} {short}"
 
         conflicts = lines(["git", "diff", "--name-only", "--diff-filter=U"])
@@ -1605,10 +1717,11 @@ class Pk:
             else:
                 out(f"  {C.red}MISS{C.reset}  no default profile: run '{self.self_name} doctor --fix'")
                 failed = True
-            if os.path.isfile(os.path.join("profiles", self.native_profile)):
-                out(f"  {C.green}OK{C.reset}    profiles/{self.native_profile}")
+            if os.path.isfile(self.layout.rel("profiles", self.native_profile)):
+                out(f"  {C.green}OK{C.reset}    {self.layout.rel('profiles', self.native_profile)}")
             else:
-                out(f"  {C.yellow}--{C.reset}    no profiles/{self.native_profile}, the default profile is used")
+                out(f"  {C.yellow}--{C.reset}    no {self.layout.rel('profiles', self.native_profile)}, "
+                    "the default profile is used")
 
         out(f"\n{C.bold}native verify targets here{C.reset}")
         for name, kind, *_rest in targets.RECORDS:

@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 from typing import Dict, List, Optional, Tuple, Union
 
+from . import tree as pktree
 from .common import have, host_arch, host_platform, tool_env
 
 RECORDS = (
@@ -79,8 +80,8 @@ def availability(name: str, root: str, mode: str = "strict") -> Optional[Tuple[b
 
     if kind == "cross":
         triple = name[len("cross-"):]
-        if not os.path.isfile(os.path.join(root, "profiles", triple)):
-            return False, f"no profiles/{triple}"
+        if not os.path.isfile(pktree.profile(root, triple)):
+            return False, f"no {pktree.load_or_exit(root).rel('profiles', triple)}"
 
     return True, ""
 
@@ -96,7 +97,7 @@ def configure(name: str, root: str) -> Optional[Dict[str, Union[str, List[str]]]
         return None
     settings: Dict[str, Union[str, List[str]]] = {
         "platform_label": entry[6] if entry else "",
-        "build_profile": os.path.join(root, "profiles", "native"),
+        "build_profile": pktree.profile(root, "native"),
         "host_profile": "",
         "preset_prefix": "native",
         "library_types": ["STATIC", "SHARED", "STATIC+SHARED"],
@@ -108,7 +109,7 @@ def configure(name: str, root: str) -> Optional[Dict[str, Union[str, List[str]]]
     if name.startswith("cross-"):
         triple = name[len("cross-"):]
         settings.update({
-            "host_profile": os.path.join(root, "profiles", triple),
+            "host_profile": pktree.profile(root, triple),
             "preset_prefix": triple,
             "library_types": ["STATIC", "SHARED"],
             "required_tools": ["conan", "cmake", "ninja", "git"],

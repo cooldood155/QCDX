@@ -15,6 +15,7 @@ import os
 from typing import Callable, List, Optional, Tuple
 
 from . import targets
+from . import tree as pktree
 from .common import (BUILD_TYPES, C, entry, err, has_file, host_arch, host_platform, load_conf, out,
                      repo_root, run, setup_output)
 from .verify_base import Verify
@@ -95,7 +96,7 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
     root = repo_root(given_root, has_file("CMakeLists.txt"),
                      "no CMakeLists.txt found above {cwd}: set PK_REPO_ROOT")
     setup_output()
-    conf = load_conf(root, "scripts/helpers/verify/verify.conf")
+    conf = load_conf(root, pktree.helper(root, "verify/verify.conf"))
     base = Verify(root, conf)
 
     command = argv[0] if argv else "run"

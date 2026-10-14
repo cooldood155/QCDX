@@ -9,6 +9,7 @@ import os
 import shutil
 from typing import Dict, List, Optional
 
+from . import tree as pktree
 from .common import (BUILD_TYPES, SCRIPTS_DIR, C, capture, confirm, entry, err, load_conf, native_path, out,
                      repo_root, run, setup_output, shown)
 
@@ -44,7 +45,7 @@ flags:
 
 class Package:
     def __init__(self, root: str) -> None:
-        conf = load_conf(root, "scripts/helpers/package/package.conf")
+        conf = load_conf(root, pktree.helper(root, "package/package.conf"))
         self.root = root
         self.profile = conf.get("PK_PROFILE")
         self.host_profile = conf.get("PK_HOST_PROFILE")
@@ -72,12 +73,12 @@ class Package:
         return 0 if self.dry_run else run(argv)
 
     def profile_path(self, name: str) -> str:
-        native = os.path.join(self.root, "profiles", "native")
+        native = pktree.profile(self.root, "native")
         if not name:
             return native if os.path.isfile(native) else "default"
         if os.path.isfile(name):
             return name
-        candidate = os.path.join(self.root, "profiles", name)
+        candidate = pktree.profile(self.root, name)
         return candidate if os.path.isfile(candidate) else name
 
     def recipe_field(self, field: str) -> str:

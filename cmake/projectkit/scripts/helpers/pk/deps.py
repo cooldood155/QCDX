@@ -26,6 +26,10 @@ import shutil
 import subprocess
 import sys
 
+# pklib is in the kit's scripts folder, two levels up.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from pklib import tree as pktree  # noqa: E402
+
 SCHEMA = 1
 KINDS = ("requires", "test", "tool")
 TRAITS = ("headers", "libs", "run", "visible", "transitive_headers",
@@ -233,7 +237,7 @@ class Repo:
 
     def profile_args(self, profile):
         def resolve(name):
-            candidate = os.path.join("profiles", name)
+            candidate = pktree.load_or_exit(self.root).rel("profiles", name)
             if os.path.isfile(os.path.join(self.root, candidate)):
                 return candidate
             return name
@@ -308,9 +312,9 @@ class Repo:
         profile = profile or self.profiles[0]
         digest = hashlib.sha1()
 
+        tree = pktree.load_or_exit(self.root)
         for rel in ("conanfile.py", "deps.json", "conan.lock",
-                    os.path.join("profiles", self.native),
-                    os.path.join("profiles", profile)):
+                    tree.rel("profiles", self.native), tree.rel("profiles", profile)):
             path = os.path.join(self.root, rel)
             if os.path.isfile(path):
                 with open(path, "rb") as handle:

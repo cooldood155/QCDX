@@ -129,6 +129,19 @@ runs:
     # Conan cache
     # -------------------------------------------------------------------------
 
+    # The profiles are under profiles/, or wherever .pk/tree.conf puts them.
+    - name: Find the Conan profiles
+      id: tree
+      shell: bash
+      run: |
+        profiles=profiles
+        if [ -f .pk/tree.conf ]; then
+          value="$(awk -F= 'tolower($1) ~ /^[ \t]*(pk_tree_)?profiles[ \t]*$/ { v = $2 }
+            END { gsub(/["\r]/, "", v); gsub(/^[ \t]+|[ \t]+$/, "", v); print v }' .pk/tree.conf)"
+          [ -n "$value" ] && profiles="$value"
+        fi
+        echo "profiles=$profiles" >> "$GITHUB_OUTPUT"
+
     # The key is shared with verify.yml, and caches saved on main can be read
     # from every branch and tag: release runs will reuse verify's packages,
     # NEVER storing a wasteful second copy.
@@ -136,14 +149,14 @@ runs:
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ runner.temp }}/conan2/p
-        key: conan-${{ inputs.target }}-${{ hashFiles('conanfile.py', 'deps.json', 'conan.lock', 'profiles/**') }}
+        key: conan-${{ inputs.target }}-${{ hashFiles('conanfile.py', 'deps.json', 'conan.lock', format('{0}/**', steps.tree.outputs.profiles)) }}
         restore-keys: conan-${{ inputs.target }}-
 
     - if: inputs.cache == 'restore'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ runner.temp }}/conan2/p
-        key: conan-${{ inputs.target }}-${{ hashFiles('conanfile.py', 'deps.json', 'conan.lock', 'profiles/**') }}
+        key: conan-${{ inputs.target }}-${{ hashFiles('conanfile.py', 'deps.json', 'conan.lock', format('{0}/**', steps.tree.outputs.profiles)) }}
         restore-keys: conan-${{ inputs.target }}-
 
     - name: Detect the default Conan profile

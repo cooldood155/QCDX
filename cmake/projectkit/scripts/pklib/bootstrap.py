@@ -1,9 +1,9 @@
 """Rename of a project created from the template: directories, file names and
 file contents, in that order.
 
-The cmake/projectkit/ directory is never changed because nothing in it uses a
-specific project name. Git is how you undo; the script won't run on a dirty
-git repository tree unless the --force flag is given.
+The kit (cmake/projectkit/, or wherever .pk/tree.conf puts it) is never changed
+because nothing in it uses a specific project name. Git is how you undo; the
+script won't run on a dirty git repository tree unless the --force flag is given.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ import os
 import re
 from typing import Iterator, List, Optional, Set
 
+from . import tree as pktree
 from .common import (C, capture, confirm, detect_project, entry, err, has_file, out, repo_root, run,
                      setup_output)
 
@@ -19,7 +20,7 @@ USAGE = """\
 usage: {self} <new-name> [flag...]
 
 Renames every directory, file name and file content occurrence of the current
-project name. The kit under cmake/projectkit is excluded.
+project name. The kit ({kit}) is excluded.
 
 flags:
   --from=NAME          current name, default: the name in project()
@@ -37,10 +38,10 @@ namespace, so hyphens would not compile."""
 NEXT = """
 next:
   git diff --stat
-  ./scripts/package.py reference
-  ./scripts/package.py install --build_type=Debug
+  ./{scripts}/package.py reference
+  ./{scripts}/package.py install --build_type=Debug
   cmake --preset native-debug
-  ./scripts/verify.py run --build_type=Debug
+  ./{scripts}/verify.py run --build_type=Debug
 
 then review by hand:
   CMakeLists.txt   DESCRIPTION and VERSION
@@ -63,9 +64,13 @@ def shown_path(path: str) -> str:
     return path.replace(os.sep, "/")
 
 
-def text_files(top: str, skip: Set[str], suffixes: tuple = ()) -> Iterator[str]:
+def relative(path: str) -> str:
+    return os.path.normpath(path).replace(os.sep, "/")
+
+
+def text_files(top: str, skip: Set[str], suffixes: tuple = (), skip_paths: Set[str] = frozenset()) -> Iterator[str]:
     for directory, dirs, files in os.walk(top):
-        dirs[:] = sorted(d for d in dirs if d not in skip)
+        dirs[:] = sorted(d for d in dirs if d not in skip and relative(os.path.join(directory, d)) not in skip_paths)
         for name in sorted(files):
             path = os.path.join(directory, name)
             if (suffixes and not name.endswith(suffixes)) or os.path.islink(path):
@@ -83,9 +88,9 @@ def read_text_bytes(path: str) -> Optional[bytes]:
 
 
 def files_containing(top: str, skip: Set[str], needles: List[bytes], ignore_case: bool = False,
-                     suffixes: tuple = ()) -> List[str]:
+                     suffixes: tuple = (), skip_paths: Set[str] = frozenset()) -> List[str]:
     found = []
-    for path in text_files(top, skip, suffixes):
+    for path in text_files(top, skip, suffixes, skip_paths):
         data = read_text_bytes(path)
         if data is None:
             continue
@@ -133,7 +138,9 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
     root = repo_root(given_root, has_file("CMakeLists.txt"),
                      "no CMakeLists.txt found above {cwd}: set PK_REPO_ROOT")
     setup_output()
-    self_name = "./scripts/bootstrap.py"
+    layout = pktree.load_or_exit(root)
+    kit_path = layout.rel("kit")
+    self_name = "./" + layout.rel("scripts", "bootstrap.py")
 
     new_name = old_name = description = url = version = ""
     dry_run = assume_yes = force = False
@@ -154,21 +161,21 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
         elif arg == "--force":
             force = True
         elif arg in ("--help", "-h"):
-            out(USAGE.format(self=self_name))
+            out(USAGE.format(self=self_name, kit=kit_path))
             return 0
         elif arg.startswith("-"):
             err(f"unknown option: {arg}\n")
-            err(USAGE.format(self=self_name))
+            err(USAGE.format(self=self_name, kit=kit_path))
             return 2
         elif not new_name:
             new_name = arg
         else:
             err(f"unexpected argument: {arg}\n")
-            err(USAGE.format(self=self_name))
+            err(USAGE.format(self=self_name, kit=kit_path))
             return 2
 
     if not new_name:
-        err(USAGE.format(self=self_name))
+        err(USAGE.format(self=self_name, kit=kit_path))
         return 2
     if not re.fullmatch(r"[a-z][a-z0-9_]*", new_name):
         die(f"'{new_name}' must match [a-z][a-z0-9_]*, since the sample sources use it as a C++ namespace")
@@ -192,12 +199,14 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
     def paths_to_rename() -> List[str]:
         found = []
         for directory, dirs, files in os.walk("."):
-            dirs[:] = sorted(d for d in dirs if d not in GENERATED and d != "projectkit")
+            dirs[:] = sorted(d for d in dirs if d not in GENERATED and d != "projectkit"
+                             and relative(os.path.join(directory, d)) != kit_path)
             found.extend(os.path.join(directory, n) for n in dirs + sorted(files) if old_name in n)
         return sorted(found, key=lambda p: p.count(os.sep), reverse=True)
 
     def files_to_edit() -> List[str]:
-        return files_containing(".", GENERATED | {"projectkit"}, [a.encode() for a, _ in replacements])
+        return files_containing(".", GENERATED | {"projectkit"}, [a.encode() for a, _ in replacements],
+                                skip_paths={kit_path})
 
     renames = paths_to_rename()
     edits = files_to_edit()
@@ -269,7 +278,7 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
 
     out()
     remaining = files_containing(".", {".git", "build", "projectkit"}, [old_name.lower().encode()],
-                                 ignore_case=True)
+                                 ignore_case=True, skip_paths={kit_path})
     if remaining:
         out(f"{C.yellow}warning{C.reset}  still mentioning '{old_name}':")
         for path in remaining:
@@ -277,7 +286,7 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
     else:
         out(f"{C.green}no occurrences of {old_name} remain outside the kit{C.reset}")
 
-    kit = os.path.join("cmake", "projectkit")
+    kit = os.path.join(*kit_path.split("/"))
     kit_hits = files_containing(kit, {"build", "__pycache__"}, [old_name.lower().encode()],
                                 ignore_case=True, suffixes=(".cmake", ".in", ".sh", ".py"))
     if kit_hits:
@@ -285,5 +294,5 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
         for path in kit_hits:
             out(f"  {shown_path(path)}")
 
-    out(NEXT)
+    out(NEXT.format(scripts=layout.rel("scripts")))
     return 0

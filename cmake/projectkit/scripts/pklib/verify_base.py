@@ -25,6 +25,7 @@ import tempfile
 from typing import Callable, List, Optional, Tuple, Union
 
 from . import targets
+from . import tree as pktree
 from .common import (C, Config, capture, detect_project, err, exe_suffix, have, load_conf, native_path, out,
                      remove, run, tee, walk_files)
 
@@ -39,7 +40,8 @@ def make_prefix(project: str) -> str:
 
 class Verify:
     def __init__(self, root: str, conf: Optional[Config] = None) -> None:
-        conf = conf or load_conf(root, "scripts/helpers/verify/verify.conf")
+        layout = pktree.load_or_exit(root)
+        conf = conf or load_conf(root, layout.rel("helpers", "verify/verify.conf"))
         self.root = root
         self.project = conf.get("PK_PROJECT") or detect_project(root)
         if not self.project:
@@ -50,13 +52,13 @@ class Verify:
         self.package = conf.get("PK_PACKAGE", self.project)
         self.link_target = conf.get("PK_LINK_TARGET", f"{self.package}::{self.package}")
         self.consumer_source = conf.get("PK_CONSUMER_SOURCE")
-        self.scratch_dir = conf.get("PK_SCRATCH_DIR", os.path.join(root, "src", self.project, "scratch"))
+        self.scratch_dir = conf.get("PK_SCRATCH_DIR", layout.path(root, "sources", self.project, "scratch"))
         self.prefix = make_prefix(self.project)
         self.consumer_dir = conf.get(
             "PK_CONSUMER_DIR", os.path.join(tempfile.gettempdir(), f"{self.project}-consumer"))
         self.platform_label = conf.get(
             "PK_PLATFORM_LABEL", f"{platform.system() or 'unknown'} {platform.machine() or 'unknown'}")
-        self.build_profile = conf.get("PK_BUILD_PROFILE", os.path.join(root, "profiles", "native"))
+        self.build_profile = conf.get("PK_BUILD_PROFILE", layout.path(root, "profiles", "native"))
         self.host_profile = conf.get("PK_HOST_PROFILE")
         self.build_types = conf.get("PK_BUILD_TYPES", "Debug Release").split()
         self.preset_prefix = conf.get("PK_PRESET_PREFIX", "native")
@@ -215,7 +217,7 @@ class Verify:
     def stage_host_tools_for_cross(self) -> bool:
         self.stage("Host tools for cross")
         if not self.attempt(f"conan install ({self.build_type}, native)", [
-                "conan", "install", self.root, "-pr:a", os.path.join(self.root, "profiles", "native"),
+                "conan", "install", self.root, "-pr:a", pktree.profile(self.root, "native"),
                 "-s", f"build_type={self.build_type}", "--build=missing"]):
             return False
         remove(os.path.join(self.root, "build", self.host_tools_preset))
