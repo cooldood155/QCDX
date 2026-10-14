@@ -31,6 +31,33 @@ and/or fixes that directly impact users and is not logged in this document.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-14
+
+### Added
+
+- Project trees: where each part of a project lives (the kit, scripts,
+  settings, profiles, headers, sources, apps, tests and the rest), kept in
+  `.pk/tree.conf`. A project without one has the classic tree, the same as
+  before. CMake, `pk`, the scripts, CI and `pk sync` all follow it. See
+  [`TREE.md`](cmake/projectkit/docs/TREE.md).
+- `pk new --tree=NAME|FILE`: `classic` (the default), `minimal` (the kit,
+  scripts, settings and profiles in `.pk/`, with tools, clangd and pre-commit
+  left out), a tree of your own in `~/.pk/trees/` or a drawing.
+  `--omit=PART,...` leaves parts out of any tree.
+- `pk tree` inside a project: shows the tree, and `check`, `draw`,
+  `apply FILE|NAME` (moves the files and updates every file naming them, as
+  one commit) and `reset` (back to the last tree that worked). Outside a
+  project `pk tree` lists the trees `pk new` takes.
+- `pk_tree_dir()`, `pk_tree_has()` and `pk_tree_base_dir()` in
+  `Layout.cmake`. The creators' default folders come from the tree.
+
+### Changed
+
+- `scripts/*.py`: the project root is the nearest folder with a
+  `CMakePresets.json`, and the kit is found through `.pk/tree.conf`. The
+  global `pk` and the `pk` function of `pk shell-init` find `pk.py` wherever
+  the tree puts the scripts.
+
 ## [0.1.1] - 2026-10-14
 
 ### Added
@@ -139,6 +166,7 @@ with a global `pk` command that creates projects and works inside them.
   `ci.yml`, then publishes the tested files to PyPI (trusted publishing) and
   GitHub Releases, with `SHA256SUMS` and provenance attestations.
 
-[Unreleased]: https://github.com/cooldood155/QCDX/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/cooldood155/QCDX/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/cooldood155/QCDX/releases/tag/v0.2.0
 [0.1.1]: https://github.com/cooldood155/QCDX/releases/tag/v0.1.1
 [0.1.0]: https://github.com/cooldood155/QCDX/releases/tag/v0.1.0
