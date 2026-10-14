@@ -1,6 +1,8 @@
 import json
 import shutil
 
+from qcdx import __version__
+
 
 def registry(tmp_path):
     return json.loads((tmp_path / "pk-home" / "projects.json").read_text(encoding="utf-8"))["projects"]
@@ -15,7 +17,7 @@ def test_new_remembers_the_project(pk, tmp_path):
     assert pk("new", "rocket", "--no-git")[0] == 0
     code, out = pk("list")
     assert code == 0, out
-    assert "rocket" in out and "0.1.0" in out and str(tmp_path / "rocket") in out
+    assert "rocket" in out and __version__ in out and str(tmp_path / "rocket") in out
 
 
 def test_a_command_inside_a_project_remembers_it(pk, tmp_path):

@@ -1,11 +1,11 @@
 from conftest import requires_cmake
 
-from qcdx import cli
+from qcdx import __version__, cli
 
 
 def test_version(pk):
     code, out = pk("--version")
-    assert code == 0 and out.startswith("QCDX 0.1.0")
+    assert code == 0 and out.startswith(f"QCDX {__version__}")
 
 
 def test_outside_a_project(pk):
@@ -19,7 +19,7 @@ def test_delegates_inside_a_project(pk, tmp_path):
     code, out = pk("help", cwd=tmp_path / "probe" / "src")
     assert code == 0 and "install and ship" in out
     code, out = pk("--version", cwd=tmp_path / "probe")
-    assert "kit 0.1.0" in out
+    assert f"kit {__version__}" in out
 
 
 def test_find_project_needs_presets(tmp_path):

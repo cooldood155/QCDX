@@ -3,6 +3,8 @@ import subprocess
 
 from conftest import ROOT, requires_git
 
+from qcdx import __version__
+
 
 def files_mentioning(root, word):
     hits = []
@@ -74,7 +76,7 @@ def test_new_makes_a_first_commit(pk, tmp_path):
     code, out = pk("new", "probe")
     assert code == 0, out
     log = subprocess.run(["git", "log", "--format=%s"], cwd=tmp_path / "probe", capture_output=True, text=True)
-    assert log.stdout.strip() == "Create probe with QCDX 0.1.0"
+    assert log.stdout.strip() == f"Create probe with QCDX {__version__}"
 
 
 def test_new_refuses_bad_names_and_full_directories(pk, tmp_path):
