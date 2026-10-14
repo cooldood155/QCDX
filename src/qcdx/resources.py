@@ -118,6 +118,20 @@ def copy_kit(target: Path) -> None:
             script.chmod(script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
+def kit_tree():
+    """The tree model of the kit this QCDX ships (presets included), loaded
+    from real files: a zipapp's kit is extracted first, like cmake_dir()."""
+    import importlib.util
+
+    path = cmake_dir() / "projectkit" / "scripts" / "pklib" / "tree.py"
+    if not path.is_file():  # extracted by a QCDX of the same version that had no trees yet
+        copy_tree(kit_root() / "cmake" / "projectkit", cmake_dir() / "projectkit")
+    spec = importlib.util.spec_from_file_location("qcdx_kit_tree", str(path))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)  # type: ignore[union-attr]
+    return module
+
+
 def cmake_dir() -> Path:
     """A real directory holding QCDXConfig.cmake and projectkit/.
 

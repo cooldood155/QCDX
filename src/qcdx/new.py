@@ -11,10 +11,12 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import List, Optional
 
 from . import registry, resources
+from .layout import tree_part
 
 TEMPLATE_NAME = "qcdx"
 TEMPLATE_DESCRIPTION = "Template project built on ProjectKit"
@@ -31,6 +33,9 @@ build-time tool, all named NAME, that configures and builds right away.
   --author=TEXT         recipe author, default from 'git config user.name/email'
   --url=URL             recipe url, e.g. the repository's address
   --license=SPDX        recipe license, e.g. MIT (add the LICENSE file yourself)
+  --tree=NAME|FILE      where each part goes: classic (default), minimal, one of
+                        yours in ~/.pk/trees, or a tree file ('pk tree --help')
+  --omit=PART,...       leave parts out, e.g. --omit=tools,clangd,pre-commit
   --no-git              do not create a git repository and first commit
   --force               allow a DIR that exists and is not empty
   -h, --help            this message"""
@@ -94,8 +99,49 @@ def set_recipe_field(text: str, field: str, value: str) -> str:
     return anchor.sub(lambda m: f"{m.group(1)}\n{line}", text, count=1)
 
 
+def resolve_tree(spec: str, omit: List[str]):
+    """The tree a new project gets, checked before anything is created."""
+    kit_tree = resources.kit_tree()
+    if spec and os.path.isfile(spec):
+        spec = os.path.abspath(spec)
+    try:
+        tree = kit_tree.resolve(spec or "classic")
+        extra = set()
+        for word in omit:
+            key = kit_tree.omit_key(word)
+            if key is None:
+                optional = ", ".join(part.key for part in kit_tree.PARTS if part.optional)
+                raise kit_tree.TreeError(f"--omit: '{word}' is not a part ({optional} can be left out)")
+            extra.add(key)
+        return kit_tree.Tree(tree.paths, tree.omit | extra, spec or "classic").check()
+    except kit_tree.TreeError as error:
+        raise NewError(f"--tree: {error}")
+
+
+def apply_tree(target: Path, tree) -> None:
+    """Move the fresh classic project to its tree with the project's own
+    'pk tree apply', the same code that moves an existing project."""
+    handle, conf = tempfile.mkstemp(prefix="pk-new-tree.", suffix=".conf")
+    os.close(handle)
+    try:
+        write_lf(Path(conf), tree.to_conf())
+        script = target / "scripts" / "pk.py"
+        env = dict(os.environ, PK_REPO_ROOT=str(target), PK_SELF_NAME="pk")
+        result = subprocess.run([sys.executable, str(script), "tree", "apply", conf, "--yes", "--no-commit"],
+                                cwd=str(target), env=env, capture_output=True, text=True)
+    finally:
+        os.remove(conf)
+    if result.returncode != 0:
+        sys.stderr.write(result.stdout + result.stderr)
+        raise NewError(f"moving the project to its tree failed (output above); {target} has the classic tree")
+    marker = "still name an old path"
+    if marker in result.stdout:
+        sys.stderr.write("  pk new: these lines still name a classic path (a QCDX bug, please report it):\n"
+                         + result.stdout.split(marker, 1)[1].split("\n", 1)[1])
+
+
 def create(name: str, directory: Optional[str], description: str, version: str, author: str, url: str,
-           license_id: str, use_git: bool, force: bool) -> Path:
+           license_id: str, use_git: bool, force: bool, tree_spec: str = "", omit: Optional[List[str]] = None) -> Path:
     if not re.fullmatch(r"[a-z][a-z0-9_]*", name):
         raise NewError(f"'{name}' must match [a-z][a-z0-9_]*, it is also the C++ namespace")
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
@@ -108,6 +154,7 @@ def create(name: str, directory: Optional[str], description: str, version: str, 
     target = Path(directory or name).resolve()
     if target.exists() and (not target.is_dir() or any(target.iterdir())) and not force:
         raise NewError(f"{target} exists and is not empty (--force to use it anyway)")
+    tree = resolve_tree(tree_spec, omit or [])
 
     print(f"pk new: {name} in {target} (QCDX {resources.version()})")
     resources.copy_tree(resources.template_root(), target)
@@ -149,6 +196,12 @@ def create(name: str, directory: Optional[str], description: str, version: str, 
     write_lf(state, STATE.format(url=resources.UPSTREAM_URL, branch=resources.UPSTREAM_BRANCH,
                                  commit=resources.commit()))
 
+    if not tree.is_classic():
+        apply_tree(target, tree)
+        moved = ", ".join(f"{key} -> {path}" for key, path in sorted(tree.moved().items()))
+        print(f"  tree: {tree.origin}" + (f"; {moved}" if moved else "")
+              + (f"; left out: {' '.join(sorted(tree.omit))}" if tree.omit else ""))
+
     if use_git:
         init_git(target, name)
     return target
@@ -180,7 +233,8 @@ def init_git(target: Path, name: str) -> None:
 def main(argv: List[str]) -> int:
     name = ""
     directory: Optional[str] = None
-    options = {"description": "", "version": "0.1.0", "author": "", "url": "", "license": ""}
+    options = {"description": "", "version": "0.1.0", "author": "", "url": "", "license": "", "tree": ""}
+    omit: List[str] = []
     use_git, force = True, False
     for arg in argv:
         key, sep, value = arg.partition("=")
@@ -189,6 +243,8 @@ def main(argv: List[str]) -> int:
             return 0
         if sep and key[2:] in options and key.startswith("--"):
             options[key[2:]] = value
+        elif sep and key == "--omit":
+            omit += [word for word in re.split(r"[,\s]+", value) if word]
         elif arg == "--no-git":
             use_git = False
         elif arg == "--force":
@@ -208,20 +264,20 @@ def main(argv: List[str]) -> int:
         return 2
     try:
         target = create(name, directory, options["description"], options["version"], options["author"],
-                        options["url"], options["license"], use_git, force)
+                        options["url"], options["license"], use_git, force, options["tree"], omit)
     except NewError as error:
         sys.stderr.write(f"pk new: {error}\n")
         return 1
     registry.remember(target)
     shown = os.path.relpath(target) if not os.path.relpath(target).startswith("..") else str(target)
-    print(f"""
-next:
-  cd {shown}
-  pk doctor        check the tools
-  pk build         install dependencies, configure and build
-  pk run           run the {name} application
-  pk test          build and run the tests
-""")
+    steps = [f"cd {shown}", "pk doctor        check the tools",
+             "pk build         install dependencies, configure and build"]
+    if tree_part(target, "apps", "apps").is_dir():
+        steps.append(f"pk run           run the {name} application")
+    if tree_part(target, "tests", "tests").is_dir():
+        steps.append("pk test          build and run the tests")
+    steps.append("pk tree          where each part of the project lives")
+    print("\nnext:\n" + "".join(f"  {step}\n" for step in steps))
     if not options["license"]:
         print("  Choose a license: add a LICENSE file (releases attach it) and pass --license next time.")
     return 0

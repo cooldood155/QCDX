@@ -19,6 +19,8 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from .layout import project_script
+
 FORMAT = 1
 
 
@@ -108,4 +110,4 @@ def project_name(project: Path) -> Optional[str]:
 
 
 def exists(project: Path) -> bool:
-    return (project / "scripts" / "pk.py").is_file() and (project / "CMakePresets.json").is_file()
+    return (project / "CMakePresets.json").is_file() and project_script(project).is_file()

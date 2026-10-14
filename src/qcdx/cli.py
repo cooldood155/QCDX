@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from . import new, registry, resources
+from .layout import project_script, tree_part
 
 HELP = """\
 pk - QCDX {version}: create and build C and C++ projects with CMake and Conan
@@ -22,6 +23,8 @@ usage:
   pk new NAME [DIR] [flag...]   create a project ('pk new --help')
   pk list [--prune]             every project pk knows, --prune refreshes it,
                                 removing old projects
+  pk tree [NAME|FILE]           the trees 'pk new --tree=' takes, or one of them
+                                drawn (to copy and edit: pk tree minimal > my.tree)
   pk cmake-dir                  print the QCDX CMake package directory, for
                                 -DQCDX_DIR=... or CMAKE_PREFIX_PATH
   pk --version                  QCDX version, and the kit version of this project
@@ -32,14 +35,14 @@ project's own scripts/pk.py; 'pk help' there lists them all.{where}"""
 
 def find_project(start: Path) -> Optional[Path]:
     for directory in (start, *start.parents):
-        if (directory / "scripts" / "pk.py").is_file() and (directory / "CMakePresets.json").is_file():
+        if (directory / "CMakePresets.json").is_file() and project_script(directory).is_file():
             return directory
     return None
 
 
 def project_kit_version(project: Path) -> str:
     try:
-        return (project / "cmake" / "projectkit" / "VERSION").read_text(encoding="utf-8").strip()
+        return (tree_part(project, "kit", "cmake/projectkit") / "VERSION").read_text(encoding="utf-8").strip()
     except OSError:
         return "unknown (older than 0.1.0)"
 
@@ -63,7 +66,7 @@ def delegate(project: Path, argv: List[str]) -> int:
     registry.remember(project)
     env = dict(os.environ, PK_SELF_NAME="pk")
     tool_path(env)
-    script = str(project / "scripts" / "pk.py")
+    script = str(project_script(project))
     try:
         return subprocess.call([sys.executable, script, *argv], env=env)
     except KeyboardInterrupt:
@@ -114,6 +117,36 @@ def list_projects(argv: List[str]) -> int:
     return 0
 
 
+def tree_outside(argv: List[str]) -> int:
+    """'pk tree' outside a project: the trees a new project can have."""
+    kit_tree = resources.kit_tree()
+    if argv and argv[0] in ("-h", "--help", "help"):
+        print("usage: pk tree [NAME|FILE]\n\n"
+              "Without NAME: the trees 'pk new NAME --tree=TREE' takes. With NAME (classic, minimal,\n"
+              f"one of yours in {kit_tree.user_trees_dir()}) or a FILE: that tree, drawn. Save a\n"
+              "drawing, edit it and pass it to 'pk new --tree=FILE'. Inside a project 'pk tree'\n"
+              "shows and changes the project's own tree.")
+        return 0
+    if not argv or argv[0] == "list":
+        print("trees for 'pk new NAME --tree=TREE':")
+        for name in kit_tree.preset_names():
+            tree = kit_tree.resolve(name)
+            moved = ", ".join(f"{key}={path}" for key, path in sorted(tree.moved().items()))
+            omitted = " ".join(sorted(tree.omit))
+            print(f"  {name:<12} {moved or 'everything in its classic place'}"
+                  + (f"; leaves out {omitted}" if omitted else ""))
+        print(f"your own: {kit_tree.user_trees_dir()}/NAME.conf, or a drawing NAME.tree ('pk tree minimal' "
+              "prints one to start from)")
+        return 0
+    try:
+        tree = kit_tree.resolve(argv[0])
+    except kit_tree.TreeError as error:
+        sys.stderr.write(f"pk tree: {error}\n")
+        return 1
+    print(tree.draw("NAME").replace("pk tree apply .pk/tree.txt", "pk new NAME --tree=THIS_FILE"), end="")
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     try:
         return run(list(sys.argv[1:] if argv is None else argv))
@@ -142,6 +175,8 @@ def run(argv: List[str]) -> int:
         return delegate(project, argv)
     if command == "list":
         return list_projects(argv[1:])
+    if command == "tree":
+        return tree_outside(argv[1:])
     if command in ("", "help", "-h", "--help"):
         print(HELP.format(version=resources.version(), where="\n\n(no project here)"))
         return 0

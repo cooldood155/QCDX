@@ -14,8 +14,8 @@ The installed command knows where it runs:
 
 | Where you run it | What `pk` does |
 | --- | --- |
-| Outside any project | `pk new`, `pk list`, `pk --version`, `pk cmake-dir` and `pk help` |
-| Anywhere inside a project | runs that project's own `scripts/pk.py` with the same arguments |
+| Outside any project | `pk new`, `pk list`, `pk tree`, `pk --version`, `pk cmake-dir` and `pk help` |
+| Anywhere inside a project | runs that project's own `scripts/pk.py` (wherever its tree puts the scripts) with the same arguments |
 
 Inside of QCDX kitted project, the pk version the project vendors is the
 version used. Upgrading QCDX does not change your existing projects: `pk sync`
