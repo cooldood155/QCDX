@@ -31,6 +31,8 @@ and/or fixes that directly impact users and is not logged in this document.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-14
+
 ### Added
 
 - `pk list` outside a project: every project the global `pk` knows, with its
@@ -44,8 +46,11 @@ and/or fixes that directly impact users and is not logged in this document.
 - `template-sync.yml`: after every successful release (or when ran by hand),
   generates the project with `pk new qcdx` and pushes the difference to
   [QCDX-template](https://github.com/cooldood155/QCDX-template) as one commit,
-  with the template repository's own README, LICENSE and docs. This requires
-  the `TEMPLATE_REPO_TOKEN` secret.
+  with the template repository's own README, plus LICENSE, CHANGELOG and docs.
+  This requires the `TEMPLATE_REPO_TOKEN` secret.
+- `PK_RELEASE_SYNC` release setting: repository files (e.g. `CHANGELOG.md`)
+  kept in sync with the root of the releases repository under their own names,
+  the same way `PK_RELEASE_README` keeps its `README.md` in sync.
 
 ### Fixed
 
@@ -54,6 +59,14 @@ and/or fixes that directly impact users and is not logged in this document.
   and the Conan recipe.
 - `pk new`: file modes are copied from source. Inside `pk.pyz`, where modes
   cannot be read, files starting with `#!` are made executable.
+- `pk_create_test`: on Windows with MinGW or MSYS2 Clang, `pk test` failed
+  with `0xc0000139` (entry point not found) when the calling shell's `PATH`
+  listed an older `libstdc++-6.dll` first, e.g. a MINGW64 shell after a GCC
+  update. Test discovery and every test now run with the compiler's own
+  folder first on `PATH` (Catch2 `DL_PATHS`).
+- clang-tidy: a stray comma in `StaticAnalysis.cmake`, after
+  `--extra-arg=-Wno-unused-command-line-argument`, reached clang-tidy as its
+  own argument and caused a CMake dev warning on every configuration.
 - README: release badge link.
 - CHANGELOG: notable changes made, scoped to each release.
 
@@ -126,5 +139,6 @@ with a global `pk` command that creates projects and works inside them.
   `ci.yml`, then publishes the tested files to PyPI (trusted publishing) and
   GitHub Releases, with `SHA256SUMS` and provenance attestations.
 
-[Unreleased]: https://github.com/cooldood155/QCDX/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/cooldood155/QCDX/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/cooldood155/QCDX/releases/tag/v0.1.1
 [0.1.0]: https://github.com/cooldood155/QCDX/releases/tag/v0.1.0
