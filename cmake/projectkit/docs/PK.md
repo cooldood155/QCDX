@@ -21,7 +21,8 @@ echo 'eval "$(/path/to/project/scripts/pk.py shell-init)"' >> ~/.bashrc
 ```
 
 This defines a `pk` function that runs the nearest `scripts/pk.py` above the
-**current directory**, `pk build` then works anywhere inside the project, with
+**current directory** (or the `pk.py` wherever `.pk/tree.conf` puts the
+scripts), `pk build` then works anywhere inside the project, with
 tab completion for commands, flags, build types and app names.
 
 If you want to define a `pk` function that works in any `QCDX` templated
@@ -59,6 +60,7 @@ type pk
 | `list`      | build types, apps, cross targets and whether each is ready      |
 | `doctor`    | required and optional tools; `--fix` creates Conan's profile    |
 | `sync`      | update the kit from the QCDX template, as one commit            |
+| `tree`      | show, check, draw or change where each part lives (`TREE.md`)   |
 | `verify`    | runs `scripts/verify.py` with the given arguments               |
 | `package`   | runs `scripts/package.py` with the given arguments              |
 | `release`   | runs `scripts/release.py` with the given arguments              |
@@ -176,6 +178,9 @@ pk sync --from /k/Templates/QCDX # a local clone, including unpushed commits
    in the synced paths (`cmake/projectkit`, `scripts/pk.py`,
    `scripts/verify.py`, `scripts/package.py`), are applied with
    `git apply --3way`. Changes made to the kit in this project are kept.
+   In a project whose tree puts the kit or the scripts elsewhere (see
+   `TREE.md`), each QCDX path is mapped to where it lives here, and a left
+   out `pk-setup` action is skipped.
 4. The result is committed as `Sync projectkit from QCDX <commit>`, together
    with the updated `upstream.conf`. Your other uncommitted work is left
    alone and is not part of the commit.
@@ -225,7 +230,8 @@ is an error that names the command's help page.
 
 ## Configuration
 
-`scripts/helpers/pk/pk.conf` is sourced when present:
+`scripts/helpers/pk/pk.conf` is sourced when present (the paths here are the
+classic tree's; `pk tree` shows where they are in this project):
 
 ```bash
 PK_DEFAULT_TYPE=Release                  # instead of Debug

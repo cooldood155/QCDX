@@ -164,6 +164,9 @@ __pycache__/
 # ProjectKit install staging (pk stage, pk install, pk verify)
 stage/
 
+# The drawing 'pk tree draw' writes to edit; .pk/tree.conf is the tree
+.pk/tree.txt
+
 # ==========================================
 # In-Project Deamed Personal Directories
 # ==========================================

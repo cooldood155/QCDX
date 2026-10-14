@@ -58,6 +58,7 @@ COMMANDS = (
     ("inspect", "list", "ls", "", "list build types, apps, cross targets and presets"),
     ("inspect", "doctor", "", "", "check tools and environment (--fix to repair)"),
     ("project and shell", "sync", "", "upgrade", "update the kit (projectkit, scripts) from the QCDX template"),
+    ("project and shell", "tree", "", "layout", "show, check, draw or change where each part of the project lives"),
     ("project and shell", "rename", "", "bootstrap", "rename a project made from the template"),
     ("project and shell", "help", "", "", "show help ('help <command>' for one command)"),
     ("project and shell", "shell-init", "", "", "print a 'pk' function + completion for bash or PowerShell"),
@@ -1783,7 +1784,9 @@ class Pk:
             out("\n".join(words))
         elif resolved == "shell-init":
             out("bash\npowershell")
-        elif resolved not in ("format", "status", "doctor", "list", "rename", "full-clean", "sync"):
+        elif resolved == "tree":
+            out("\n".join(["show", "check", "draw", "apply", "reset", "list", "help"] + pktree.preset_names()))
+        elif resolved not in ("format", "status", "doctor", "list", "rename", "full-clean", "sync", "tree"):
             words = ["debug", "release", "relwithdebinfo", "minsizerel"]
             if resolved == "run":
                 words += self.app_names()
@@ -1799,6 +1802,17 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
     root = repo_root(given_root, has_file("CMakeLists.txt", "CMakePresets.json"),
                      "pk: no CMakeLists.txt + CMakePresets.json above {cwd}: set PK_REPO_ROOT")
     setup_output()
+    # 'pk tree' works on a broken tree too (that is what 'reset' is for), so
+    # it runs before Pk reads the tree.
+    if argv and resolve_command(argv[0])[0] == "tree":
+        from . import treecmd
+
+        name = os.environ.get("PK_SELF_NAME") or "pk"
+        return treecmd.main(argv[1:], root, f"{name} tree")
+    if len(argv) >= 2 and argv[0] == "help" and resolve_command(argv[1])[0] == "tree":
+        from . import treecmd
+
+        return treecmd.main(["help"], root, f"{os.environ.get('PK_SELF_NAME') or 'pk'} tree")
     pk = Pk(root)
     os.chdir(root)
 
