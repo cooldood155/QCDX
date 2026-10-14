@@ -92,7 +92,7 @@ $release finalize --tag=v1.2.0
 | :-- | :-- | :-- |
 | `plan` | ubuntu | `release.py plan` |
 | `build` (one per target) | the target's runner | setup, `stage`, sign (Windows, optional), `pack`, upload |
-| `publish` (tags only) | ubuntu | download, `finalize`, attest, create/update the draft, sync the releases README |
+| `publish` (tags only) | ubuntu | download, `finalize`, attest, create/update the draft, sync files to the releases repository |
 
 Time and storage saved:
 
@@ -134,6 +134,7 @@ the file is read from the environment.
 | `PK_RELEASE_EXTRA` | | repository files attached once |
 | `PK_RELEASE_HASH_LINK` | | `{sha256}` URL each hash in the notes links to |
 | `PK_RELEASE_README` | | file synced to the releases repository's `README.md` |
+| `PK_RELEASE_SYNC` | | repository files synced to the releases repository using their own names |
 
 ### Targets and runners
 
