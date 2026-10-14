@@ -1266,7 +1266,7 @@ def cmd_check(repo, args):
             proc = repo.capture(probe, check=False)
 
             if proc.returncode != 0:
-                errors = [l for l in (proc.stderr or "").splitlines() if "ERROR" in l]
+                errors = [line for line in (proc.stderr or "").splitlines() if "ERROR" in line]
                 problems.append("conan.lock does not satisfy deps.json for profile '{}': "
                                 "{}\n    fix: 'pk dep lock' (keeps other pins) or 'pk dep "
                                 "update <name>'".format(profile, " ".join(errors[-2:]) or
