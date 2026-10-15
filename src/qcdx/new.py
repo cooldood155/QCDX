@@ -142,10 +142,32 @@ def apply_tree(target: Path, tree) -> None:
 
 def create(name: str, directory: Optional[str], description: str, version: str, author: str, url: str,
            license_id: str, use_git: bool, force: bool, tree_spec: str = "", omit: Optional[List[str]] = None) -> Path:
-    if not re.fullmatch(r"[a-z][a-z0-9_]*", name):
-        raise NewError(f"'{name}' must match [a-z][a-z0-9_]*, it is also the C++ namespace")
+    RESERVED_CMAKE_CTEST={
+        "all", "clean", "edit_cache", "help", "install", "list_install_components", "package",
+        "package_source", "rebuild_cache", "test"
+    }
+    RESERVED_CXX_NAMESPACE={
+        "bool", "char", "short", "long", "int", "float", "double", "void", "signed", "unsigned",
+        "class", "struct", "union", "enum", "namespace", "using", "const", "volatile", "mutable",
+        "static", "register", "extern", "inline", "virtual", "explicit", "friend", "typename",
+        "template", "sizeof", "typeof", "decltype", "alignof", "alignas", "noexcept", "thread_local",
+        "public", "protected", "private", "operator", "this", "new", "delete", "throw", "catch", "try",
+        "goto", "switch", "case", "default", "sizeof", "static_cast", "dynamic_cast",
+        "const_cast", "reinterpret_cast", "true", "false", "nullptr", "std"
+    }
+
+    if not re.fullmatch(r"[a-z_][a-z0-9_]{1,100}", name):
+        raise NewError(f"'{name}' must match [a-z_][a-z0-9_]+, it is also the C++ namespace")
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
         raise NewError("--version must be X.Y.Z")
+    if name.startswith("__"):
+        raise NewError(f"'{name}' cannot start with '__', may conflict with C++.")
+
+    if name in RESERVED_CMAKE_CTEST:
+        raise NewError(f"'{name}' is a reserved CMake/CTest target name")
+    if name in RESERVED_CXX_NAMESPACE:
+        raise NewError(f"'{name}' is a reserved C++ keyword or namespace name")
+
     for label, value in (("description", description), ("author", author), ("url", url),
                          ("license", license_id)):
         if '"' in value or "\n" in value:
