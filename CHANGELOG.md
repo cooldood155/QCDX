@@ -76,6 +76,11 @@ and/or fixes that directly impact users and is not logged in this document.
   `testConfig`). Setting a projects name to one the kit uses as a word of its
   own is stopped without changing anything (`--allow-ambiguous` renames it
   anyways).
+- `pk sync` on Windows using MSYS2's git and native Python (UCRT64, MINGW64)
+  would fail with "no commit in upstream touches". MSYS2 expands braces within
+  arguments of an MSYS program (git) started from a native one (Python), and
+  `^{commit}` reached git as `^commit`. Revisions are now written as `^0`,
+  meaning the same thing.
 
 ## [0.1.1] - 2026-10-14
 
