@@ -57,6 +57,25 @@ and/or fixes that directly impact users and is not logged in this document.
   `CMakePresets.json`, and the kit is found through `.pk/tree.conf`. The
   global `pk` and the `pk` function of `pk shell-init` find `pk.py` wherever
   the tree puts the scripts.
+- Project names: `pk new` and `pk rename` both rely on the same rules
+  (`pklib/names.py`). A name is 2 to 101 characters matching
+  `[a-z][a-z0-9_]*`, without `__`, and cannot be a C++ keyword, `std`,
+  `posix`, a target name CMake reserves (`test`, `install`, ...), a macro
+  GCC/Clang predefine (`linux`, `unix`) or Windows device name (`con`, `nul`,
+  ...). `pk new` will note if the kit uses the name as a word.
+- `pk new`: a missing NAME and an option written with a space (`--tree
+  minimal`) are now reported as such. An interrupted first commit is reported
+  instead of just ending `pk new` silently.. (the files stay staged).
+
+### Fixed
+
+- `pk rename` replaced every occurrence of the old name (including substrings).
+  Renaming a project named `test` (when pk didn't block it) would change
+  the `tests/` directory and `skip_test` Conan profile setting. Now only whole
+  parts of identifiers are renamed (`test_app`, `TEST_BUILD_TESTS`,
+  `testConfig`). Setting a projects name to one the kit uses as a word of its
+  own is stopped without changing anything (`--allow-ambiguous` renames it
+  anyways).
 
 ## [0.1.1] - 2026-10-14
 
