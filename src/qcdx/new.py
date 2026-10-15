@@ -29,7 +29,7 @@ build-time tool, all named NAME, that configures and builds right away.
 
   NAME                  [a-z][a-z0-9_]*, it is also the C++ namespace
   --description=TEXT    project(DESCRIPTION) and the Conan recipe
-  --version=X.Y.Z       first version, default 0.1.0
+  --version=X.Y.Z       first version, default 0.0.0
   --author=TEXT         recipe author, default from 'git config user.name/email'
   --url=URL             recipe url, e.g. the repository's address
   --license=SPDX        recipe license, e.g. MIT (add the LICENSE file yourself)
@@ -233,7 +233,7 @@ def init_git(target: Path, name: str) -> None:
 def main(argv: List[str]) -> int:
     name = ""
     directory: Optional[str] = None
-    options = {"description": "", "version": "0.1.0", "author": "", "url": "", "license": "", "tree": ""}
+    options = {"description": "", "version": "0.0.0", "author": "", "url": "", "license": "", "tree": ""}
     omit: List[str] = []
     use_git, force = True, False
     for arg in argv:
