@@ -12,6 +12,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import types
 from pathlib import Path
 from typing import List, Optional
 
@@ -27,7 +28,8 @@ usage: pk new NAME [DIR] [flag...]
 Creates DIR (default ./NAME) with a library, an application, tests and a
 build-time tool, all named NAME, that configures and builds right away.
 
-  NAME                  [a-z][a-z0-9_]*, it is also the C++ namespace
+  NAME                  [a-z][a-z0-9_]+, it is also the C++ namespace (not a
+                        reserved C++, CMake/CTest or Windows name)
   --description=TEXT    project(DESCRIPTION) and the Conan recipe
   --version=X.Y.Z       first version, default 0.0.0
   --author=TEXT         recipe author, default from 'git config user.name/email'
@@ -99,6 +101,15 @@ def set_recipe_field(text: str, field: str, value: str) -> str:
     return anchor.sub(lambda m: f"{m.group(1)}\n{line}", text, count=1)
 
 
+def kit_names() -> types.SimpleNamespace:
+    source = resources.kit_root()
+    for part in ("cmake", "projectkit", "scripts", "pklib", "names.py"):
+        source = source / part
+    namespace = {"__name__": "pklib_names"}
+    exec(compile(source.read_text(encoding="utf-8"), "pklib/names.py", "exec"), namespace)
+    return types.SimpleNamespace(**namespace)
+
+
 def resolve_tree(spec: str, omit: List[str]):
     """The tree a new project gets, checked before anything is created."""
     kit_tree = resources.kit_tree()
@@ -142,31 +153,11 @@ def apply_tree(target: Path, tree) -> None:
 
 def create(name: str, directory: Optional[str], description: str, version: str, author: str, url: str,
            license_id: str, use_git: bool, force: bool, tree_spec: str = "", omit: Optional[List[str]] = None) -> Path:
-    RESERVED_CMAKE_CTEST={
-        "all", "clean", "edit_cache", "help", "install", "list_install_components", "package",
-        "package_source", "rebuild_cache", "test"
-    }
-    RESERVED_CXX_NAMESPACE={
-        "bool", "char", "short", "long", "int", "float", "double", "void", "signed", "unsigned",
-        "class", "struct", "union", "enum", "namespace", "using", "const", "volatile", "mutable",
-        "static", "register", "extern", "inline", "virtual", "explicit", "friend", "typename",
-        "template", "sizeof", "typeof", "decltype", "alignof", "alignas", "noexcept", "thread_local",
-        "public", "protected", "private", "operator", "this", "new", "delete", "throw", "catch", "try",
-        "goto", "switch", "case", "default", "sizeof", "static_cast", "dynamic_cast",
-        "const_cast", "reinterpret_cast", "true", "false", "nullptr", "std"
-    }
-
-    if not re.fullmatch(r"[a-z_][a-z0-9_]{1,100}", name):
-        raise NewError(f"'{name}' must match [a-z_][a-z0-9_]+, it is also the C++ namespace")
+    names = kit_names()
+    if names.problem(name):
+        raise NewError(names.problem(name))
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
         raise NewError("--version must be X.Y.Z")
-    if name.startswith("__"):
-        raise NewError(f"'{name}' cannot start with '__', may conflict with C++.")
-
-    if name in RESERVED_CMAKE_CTEST:
-        raise NewError(f"'{name}' is a reserved CMake/CTest target name")
-    if name in RESERVED_CXX_NAMESPACE:
-        raise NewError(f"'{name}' is a reserved C++ keyword or namespace name")
 
     for label, value in (("description", description), ("author", author), ("url", url),
                          ("license", license_id)):
@@ -184,7 +175,7 @@ def create(name: str, directory: Optional[str], description: str, version: str, 
 
     if name != TEMPLATE_NAME:
         bootstrap = [sys.executable, str(target / "scripts" / "bootstrap.py"), name, f"--from={TEMPLATE_NAME}",
-                     "--yes", "--force"]
+                     "--yes", "--force", "--allow-ambiguous"]
         env = dict(os.environ, PK_REPO_ROOT=str(target), PK_SELF_NAME="pk rename")
         result = subprocess.run(bootstrap, cwd=str(target), env=env, capture_output=True, text=True)
         if result.returncode != 0:
@@ -218,6 +209,9 @@ def create(name: str, directory: Optional[str], description: str, version: str, 
     write_lf(state, STATE.format(url=resources.UPSTREAM_URL, branch=resources.UPSTREAM_BRANCH,
                                  commit=resources.commit()))
 
+    if name != TEMPLATE_NAME and names.kit_uses(name, str(target / "cmake" / "projectkit")):
+        print(f"  note: the kit uses '{name}' as its own word, 'pk rename' away from it needs --allow-ambiguous")
+
     if not tree.is_classic():
         apply_tree(target, tree)
         moved = ", ".join(f"{key} -> {path}" for key, path in sorted(tree.moved().items()))
@@ -245,11 +239,16 @@ def init_git(target: Path, name: str) -> None:
     git(["add", "-A"], target)
     message = f"Create {name} with QCDX {resources.version()}"
     # Inherit the terminal so a commit signing passphrase can be asked for.
-    committed = subprocess.run(["git", "commit", "-q", "-m", message], cwd=str(target)).returncode == 0
+    try:
+        committed = subprocess.run(["git", "commit", "-q", "-m", message], cwd=str(target)).returncode == 0
+    except KeyboardInterrupt:
+        print(f"\n  git: first commit interrupted, files are staged (finish with: git commit -m \"{message}\")")
+        return
     if committed:
         print(f"  git: first commit '{message}'")
     else:
-        print("  git: files are staged, the first commit failed (set user.name/user.email and commit)")
+        print("  git: files are staged, the first commit failed (check user.name/user.email or the signing key, "
+              "then commit)")
 
 
 def main(argv: List[str]) -> int:
@@ -271,6 +270,9 @@ def main(argv: List[str]) -> int:
             use_git = False
         elif arg == "--force":
             force = True
+        elif not sep and arg.startswith("--") and (arg[2:] in options or arg == "--omit"):
+            sys.stderr.write(f"pk new: {arg} needs a value, written {arg}=VALUE\n")
+            return 2
         elif arg.startswith("-"):
             sys.stderr.write(f"pk new: unknown option {arg}\n\n{USAGE}\n")
             return 2
@@ -282,7 +284,7 @@ def main(argv: List[str]) -> int:
             sys.stderr.write(f"pk new: unexpected argument {arg}\n\n{USAGE}\n")
             return 2
     if not name:
-        sys.stderr.write(USAGE + "\n")
+        sys.stderr.write(f"pk new: missing NAME\n\n{USAGE}\n")
         return 2
     try:
         target = create(name, directory, options["description"], options["version"], options["author"],

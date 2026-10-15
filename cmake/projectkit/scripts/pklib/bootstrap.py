@@ -13,6 +13,7 @@ import re
 from typing import Iterator, List, Optional, Set
 
 from . import tree as pktree
+from .names import kit_uses, name_forms, name_pattern, problem
 from .common import (C, capture, confirm, detect_project, entry, err, has_file, out, repo_root, run,
                      setup_output)
 
@@ -30,10 +31,16 @@ flags:
   --dry-run            list what would change, touch nothing
   --yes, -y            do not ask for confirmation
   --force              run even when the git tree is dirty
+  --allow-ambiguous    rename even when the kit uses the current name as a
+                       word; review every change with 'git diff' afterwards
   --help, -h           this message
 
-A name must match [a-z][a-z0-9_]*: the sample sources use it as a C++
-namespace, so hyphens would not compile."""
+A name must match [a-z][a-z0-9_]+ (2-101 characters) and not be a reserved
+C++, CMake/CTest or Windows name; the sample sources use it as a C++ namespace,
+so hyphens don't work.
+
+Only whole parts of identifiers are renamed: for a project called 'name',
+'name_app' and 'NAME_BUILD_TESTS' change, 'names' and 'skip_name' do not."""
 
 NEXT = """
 next:
@@ -49,6 +56,23 @@ then review by hand:
   README.md        still describes the template"""
 
 GENERATED = {".git", "build", "stage", "_install", ".conan-cache"}
+
+def rename_text(pattern: "re.Pattern[bytes]", mapping: dict, data: bytes) -> bytes:
+    return pattern.sub(lambda m: m.group(1) + mapping[m.group(2)], data)
+
+
+def matching_lines(pattern: "re.Pattern[bytes]", top: str, skip: Set[str], suffixes: tuple = (),
+                   skip_paths: Set[str] = frozenset()) -> List[str]:
+    found = []
+    for path in text_files(top, skip, suffixes, skip_paths):
+        data = read_text_bytes(path)
+        if data is None or not pattern.search(data):
+            continue
+        for number, line in enumerate(data.splitlines(), 1):
+            if pattern.search(line):
+                text = line.decode("utf-8", "replace").strip()
+                found.append(f"{shown_path(path)}:{number}: {text[:100]}")
+    return found
 
 
 def die(message: str) -> None:
@@ -143,7 +167,7 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
     self_name = "./" + layout.rel("scripts", "bootstrap.py")
 
     new_name = old_name = description = url = version = ""
-    dry_run = assume_yes = force = False
+    dry_run = assume_yes = force = allow_ambiguous = False
     for arg in argv:
         key, sep, value = arg.partition("=")
         if sep and key == "--from":
@@ -160,6 +184,8 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
             assume_yes = True
         elif arg == "--force":
             force = True
+        elif arg == "--allow-ambiguous":
+            allow_ambiguous = True
         elif arg in ("--help", "-h"):
             out(USAGE.format(self=self_name, kit=kit_path))
             return 0
@@ -177,8 +203,8 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
     if not new_name:
         err(USAGE.format(self=self_name, kit=kit_path))
         return 2
-    if not re.fullmatch(r"[a-z][a-z0-9_]*", new_name):
-        die(f"'{new_name}' must match [a-z][a-z0-9_]*, since the sample sources use it as a C++ namespace")
+    if problem(new_name):
+        die(problem(new_name))
 
     old_name = old_name or detect_project(root)
     if not old_name:
@@ -186,12 +212,27 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
     if old_name == new_name:
         die(f"the project is already called '{new_name}'")
 
-    old_upper, new_upper = old_name.upper(), new_name.upper()
-    old_title, new_title = old_name[:1].upper() + old_name[1:], new_name[:1].upper() + new_name[1:]
-    replacements = [(old_upper, new_upper), (old_title, new_title), (old_name, new_name)]
-    byte_replacements = [(a.encode(), b.encode()) for a, b in replacements]
+    old_upper, old_title, _ = name_forms(old_name)
+    new_upper, new_title, _ = name_forms(new_name)
+    pattern = name_pattern(old_name)
+    mapping = {old.encode(): new.encode() for old, new in zip(name_forms(old_name), name_forms(new_name))}
 
     os.chdir(root)
+    kit = os.path.join(*kit_path.split("/"))
+
+    uses = kit_uses(old_name, kit)
+    if uses and not allow_ambiguous:
+        err(f"{C.red}error{C.reset}  the kit uses '{old_name}' as its own word:")
+        for line in uses[:5]:
+            err(f"  {line}")
+        err("the project uses it the same way where it is not the project name, and a rename cannot\n"
+            "tell them apart. Nothing changed: rename by hand, or pass --allow-ambiguous and check\n"
+            "'git diff' before committing.")
+        return 1
+    if kit_uses(new_name, kit):
+        out(f"{C.yellow}note{C.reset}  the kit uses '{new_name}' as its own word, renaming away from it later "
+            f"needs --allow-ambiguous")
+
     in_git = capture(["git", "rev-parse", "--git-dir"])[0] == 0
     if not force and not dry_run and in_git and capture(["git", "status", "--porcelain"])[1].strip():
         die("the git tree is dirty; commit first so this is revertible, or pass --force")
@@ -201,12 +242,16 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
         for directory, dirs, files in os.walk("."):
             dirs[:] = sorted(d for d in dirs if d not in GENERATED and d != "projectkit"
                              and relative(os.path.join(directory, d)) != kit_path)
-            found.extend(os.path.join(directory, n) for n in dirs + sorted(files) if old_name in n)
+            found.extend(os.path.join(directory, n) for n in dirs + sorted(files) if pattern.search(n.encode()))
         return sorted(found, key=lambda p: p.count(os.sep), reverse=True)
 
     def files_to_edit() -> List[str]:
-        return files_containing(".", GENERATED | {"projectkit"}, [a.encode() for a, _ in replacements],
-                                skip_paths={kit_path})
+        found = []
+        for path in text_files(".", GENERATED | {"projectkit"}, skip_paths={kit_path}):
+            data = read_text_bytes(path)
+            if data is not None and pattern.search(data):
+                found.append(path)
+        return found
 
     renames = paths_to_rename()
     edits = files_to_edit()
@@ -232,9 +277,7 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
         if not os.path.lexists(path):
             continue
         directory, base = os.path.split(path)
-        new_base = base
-        for old, new in replacements:
-            new_base = new_base.replace(old, new)
+        new_base = rename_text(pattern, mapping, base.encode()).decode()
         if new_base == base:
             continue
         target = os.path.join(directory, new_base)
@@ -251,9 +294,7 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
         data = read_text_bytes(path)
         if data is None:
             continue
-        updated = data
-        for old, new in byte_replacements:
-            updated = updated.replace(old, new)
+        updated = rename_text(pattern, mapping, data)
         if updated != data:
             with open(path, "wb") as file:
                 file.write(updated)
@@ -277,22 +318,24 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
             t, r"(VERSION\s*)[0-9]+\.[0-9]+\.[0-9]+", version))
 
     out()
-    remaining = files_containing(".", {".git", "build", "projectkit"}, [old_name.lower().encode()],
-                                 ignore_case=True, skip_paths={kit_path})
-    if remaining:
-        out(f"{C.yellow}warning{C.reset}  still mentioning '{old_name}':")
-        for path in remaining:
+    if any(pattern.search(form.encode()) for form in name_forms(new_name)):
+        out(f"{C.green}renamed{C.reset} ('{new_name}' contains '{old_name}', leftovers not checked)")
+        out(NEXT.format(scripts=layout.rel("scripts")))
+        return 0
+    left = matching_lines(pattern, ".", {".git", "build", "projectkit"}, skip_paths={kit_path})
+    inside = files_containing(".", {".git", "build", "projectkit"}, [old_name.lower().encode()],
+                              ignore_case=True, skip_paths={kit_path})
+    if left:
+        out(f"{C.yellow}warning{C.reset}  still naming '{old_name}', a bug in the rename:")
+        for line in left:
+            out(f"  {line}")
+    elif inside:
+        out(f"{C.green}no '{old_name}' names remain outside the kit{C.reset}, only longer words "
+            f"containing it (left alone, check by hand):")
+        for path in inside:
             out(f"  {shown_path(path)}")
     else:
         out(f"{C.green}no occurrences of {old_name} remain outside the kit{C.reset}")
-
-    kit = os.path.join(*kit_path.split("/"))
-    kit_hits = files_containing(kit, {"build", "__pycache__"}, [old_name.lower().encode()],
-                                ignore_case=True, suffixes=(".cmake", ".in", ".sh", ".py"))
-    if kit_hits:
-        out(f"{C.yellow}warning{C.reset}  the kit mentions '{old_name}', which is a bug in the kit:")
-        for path in kit_hits:
-            out(f"  {shown_path(path)}")
 
     out(NEXT.format(scripts=layout.rel("scripts")))
     return 0
