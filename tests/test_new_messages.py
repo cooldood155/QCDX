@@ -14,7 +14,7 @@ def test_pk_new_explains_a_missing_name_and_a_spaced_value(pk):
 @requires_git
 def test_pk_new_says_when_the_first_commit_fails(pk, tmp_path):
     (tmp_path / "gitconfig").write_text("[user]\n\tname = Test User\n\temail = test@example.com\n"
-                                        "\tsigningkey = " + str(tmp_path / "missing-key") + "\n"
+                                        "\tsigningkey = " + (tmp_path / "missing-key").as_posix() + "\n"
                                         "[gpg]\n\tformat = ssh\n[commit]\n\tgpgsign = true\n"
                                         "[init]\n\tdefaultBranch = main\n")
     code, out = pk("new", "probe")
