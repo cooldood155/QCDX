@@ -1433,14 +1433,14 @@ class Pk:
         if run(fetch) != 0:
             self.die(f"could not fetch branch '{branch}' of {url}")
 
-        tip = output(["git", "rev-parse", f"{UPSTREAM_REF}^{{commit}}"])
+        tip = output(["git", "rev-parse", f"{UPSTREAM_REF}^0"])
         if self.git_ok("merge-base", "--is-ancestor", "HEAD", tip):
             self.info(f"HEAD is already part of {name}'s history: this is the template or an unchanged copy of it")
             return 0
 
         state_commit = self.state_get("commit")
         if self.sync_base:
-            base = output(["git", "rev-parse", "--verify", "-q", f"{self.sync_base}^{{commit}}"])
+            base = output(["git", "rev-parse", "--verify", "-q", f"{self.sync_base}^0"])
             if not base:
                 self.die(f"--base {self.sync_base} is not a commit in {name}")
             self.info(f"base: {self.sync_base} (--base)")
