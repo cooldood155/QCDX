@@ -35,7 +35,8 @@ also works as `./scripts/pk.py ...` (`python scripts\pk.py ...` in PowerShell).
 ## Releases
 
 Push a tag that matches `project(VERSION)` in `CMakeLists.txt` and CI builds,
-tests and archives every target, then creates a draft GitHub release:
+tests and archives every target, then creates a draft GitHub release. Set
+the `project(VERSION)` to 0.1.0 before pushing tag 0.1.0:
 
 ```bash
 git tag -s v0.1.0 -m "qcdx 0.1.0"
