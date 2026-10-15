@@ -36,7 +36,7 @@ def test_new_project_is_renamed_and_complete(pk, tmp_path):
         assert (project / relative).exists(), relative
     assert files_mentioning(project, "qcdx") == []
     cmake = (project / "CMakeLists.txt").read_text()
-    assert re.search(r"project\(rocket\s+VERSION\s+0\.1\.0", cmake)
+    assert re.search(r"project\(rocket\s+VERSION\s+0\.0\.0", cmake)
     assert 'DESCRIPTION "Rocket sim"' in cmake
     recipe = (project / "conanfile.py").read_text()
     assert 'license = "MIT"' in recipe
