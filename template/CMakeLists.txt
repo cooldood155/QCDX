@@ -14,7 +14,7 @@ set(CONAN_BUILD_DIR "${qcdx_conan_dir}" CACHE INTERNAL
   "Conan's binary output path for the current configuration / build type.")
 
 project(qcdx
-  VERSION     0.1.0
+  VERSION     0.0.0
   DESCRIPTION "Template project built on ProjectKit"
   LANGUAGES   C CXX)
 
