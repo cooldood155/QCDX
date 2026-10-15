@@ -181,11 +181,6 @@ def test_sync_follows_the_tree(pk, tmp_path):
     git("commit", "-q", "-m", "A")
     assert pk("new", "probe", "--tree=minimal")[0] == 0
     project = tmp_path / "probe"
-    # the project's kit matches A: make the scripts' modes match too
-    for name in ("pk", "verify", "package", "release", "bootstrap"):
-        os.chmod(upstream / "scripts" / f"{name}.py", 0o755)
-    git("add", "-A")
-    git("commit", "-q", "-m", "A modes")
 
     with open(upstream / "cmake/projectkit/Layout.cmake", "a") as file:
         file.write("# B\n")
