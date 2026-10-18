@@ -162,6 +162,29 @@ class Verify:
         return ["conan", "install", self.root, *profiles, "-s", f"build_type={build_type}",
                 "--build=missing"]
 
+    def conan_install_native(self, build_type: str) -> List[str]:
+        return ["conan", "install", self.root, "-pr:a", pktree.profile(self.root, "native"),
+                "-s", f"build_type={build_type}", "--build=missing"]
+
+    def dependency_installs(self, build_type: str) -> List[Tuple[str, List[str]]]:
+        installs: List[Tuple[str, List[str]]] = []
+        for name in self.type_stages:
+            if name in ("workflow", "cross_build"):
+                installs.append((f"conan install ({build_type})", self.conan_install(build_type)))
+            elif name == "host_tools_for_cross":
+                installs.append((f"conan install ({build_type}, native)", self.conan_install_native(build_type)))
+        return installs
+
+    def install_dependencies(self) -> bool:
+        os.chdir(self.root)
+        self.stage("Dependencies")
+        for build_type in self.build_types:
+            self.build_type = build_type
+            for label, command in self.dependency_installs(build_type):
+                self.attempt(label, command)
+        self.build_type = ""
+        return self.summary()
+
     def toolchain(self, build_type: str) -> str:
         return native_path(os.path.join(self.root, "build", build_type, "generators",
                                         "conan_toolchain.cmake"))
@@ -212,13 +235,10 @@ class Verify:
             self.ok(f"{self.prefix}_BUILD_TESTS is ON")
         return self.attempt(f"workflow {self.preset}", ["cmake", "--workflow", "--preset", self.preset])
 
-    # Host tools run on the build machine, so they always use the native
-    # profile, built in the same type as the pass they belong to.
     def stage_host_tools_for_cross(self) -> bool:
         self.stage("Host tools for cross")
-        if not self.attempt(f"conan install ({self.build_type}, native)", [
-                "conan", "install", self.root, "-pr:a", pktree.profile(self.root, "native"),
-                "-s", f"build_type={self.build_type}", "--build=missing"]):
+        if not self.attempt(f"conan install ({self.build_type}, native)",
+                            self.conan_install_native(self.build_type)):
             return False
         remove(os.path.join(self.root, "build", self.host_tools_preset))
         if not self.attempt(f"configure {self.host_tools_preset} ({self.build_type})",

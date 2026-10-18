@@ -24,6 +24,7 @@ scripts/helpers/verify/consumer.cpp optional smoke test
 ./scripts/verify.py list-possible
 ./scripts/verify.py run
 ./scripts/verify.py run-possible
+./scripts/verify.py deps
 ./scripts/verify.py clean
 ./scripts/verify.py help
 ```
@@ -34,6 +35,7 @@ scripts/helpers/verify/consumer.cpp optional smoke test
 | `list-possible` | Targets this machine could host, ignoring the active MSYS2 environment and missing toolchains. |
 | `run` | Verify every runnable target. This is the default when no command is given. |
 | `run-possible` | Queue every possible target. Each still re-checks its environment strictly before building. |
+| `deps` | Run only the `conan install` commands the selected targets stages run, once per build type, and build nothing of the project. It fills the Conan cache before `run` for CI to use to save the cache before verifying. |
 | `clean` | Remove generated output only. Verifies nothing. |
 | `help` | Usage text. |
 
@@ -45,7 +47,8 @@ assigning to the variable.
 
 ## 2. Flags
 
-Flags apply to `run` and `run-possible`.
+Flags apply to `run`, `run-possible` and `deps` (`--keep` doesn't do anything
+to `deps`).
 
 | flag | meaning |
 | --------------------- | ------------------------------------------------------------ |

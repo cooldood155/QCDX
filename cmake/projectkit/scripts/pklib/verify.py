@@ -30,14 +30,16 @@ commands:
   run               verify targets that can run right now (default)
   run-possible      queue every target this machine could host; each still
                     refuses to build unless its environment is actually active
+  deps              only run the conan installs the selected targets stages
+                    run, filling the Conan cache; builds nothing of the project
   clean             remove generated output only, verify nothing
   help              show this message
 
-flags for commands 'run' and 'run-possible':
+flags for commands 'run', 'run-possible' and 'deps':
   --native          only native targets
   --cross           only cross targets
   --all             both (the default)
-  --keep            leave generated output in place
+  --keep            leave generated output in place (not for 'deps')
   --build_type=T    build type(s) to verify, separated by ',' or ';'
                     (default: Debug,Release). Every build stage runs once per
                     type and nothing is built in a type not listed. Quote a
@@ -54,7 +56,8 @@ examples:
   {self} run --build_type=Debug
   {self} run --build_type='Debug;RelWithDebInfo'
   {self} run-possible
-  {self} run windows-ucrt64 cross-x86_64-mingw-w64"""
+  {self} run windows-ucrt64 cross-x86_64-mingw-w64
+  {self} deps cross-x86_64-mingw-w64"""
 
 SELF = "./scripts/verify.py"
 
@@ -113,11 +116,11 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
     if command in ("help", "--help", "-h"):
         usage()
         return 0
-    if command not in ("run", "run-possible"):
+    if command not in ("run", "run-possible", "deps"):
         err(f"unknown command: {command}\n")
         usage(write_err)
         return 2
-    mode = "strict" if command == "run" else "possible"
+    mode = "possible" if command == "run-possible" else "strict"
 
     kind_filter = ""
     keep = False
@@ -190,7 +193,10 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
         verify = Verify(root, conf)
         verify.keep = keep
         verify.build_types = build_types
-        passed = verify.apply_target(target) and verify.run_stages()
+        if command == "deps":
+            passed = verify.apply_target(target) and verify.install_dependencies()
+        else:
+            passed = verify.apply_target(target) and verify.run_stages()
         results.extend(verify.results)
         if not passed:
             any_failed = True
