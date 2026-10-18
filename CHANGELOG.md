@@ -31,6 +31,27 @@ and/or fixes that directly impact users and is not logged in this document.
 
 ## [Unreleased]
 
+### Added
+
+- `verify.py deps`: runs only the `conan install` commands the selected
+  targets stages run, once per build type, and builds nothing of the project.
+  `pk verify deps` does the same.
+- `pk-setup`: `cache: manual` (restore only, the caller saves with the new
+  outputs `conan-key` and `conan-hit`) and `compiler-cache: 'true'` (installs
+  ccache, which the kit already uses when it finds one, and restores its
+  cache).
+
+### Changed
+
+- `verify.yml`: the dependencies are installed and the Conan cache saved
+  before verifying, and only the packages are kept (`conan cache clean`). A
+  run that fails or times out after that no longer loses the dependencies it
+  built, and one interrupted while building them saves what it finished as a
+  partial cache that the next run starts from. The verify itself is
+  unchanged.
+- `verify.yml`: builds go through ccache, and its cache is saved by every
+  run, including failed ones.
+
 ## [0.2.0] - 2026-10-14
 
 ### Added
