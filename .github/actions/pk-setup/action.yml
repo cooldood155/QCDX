@@ -1,7 +1,7 @@
 name: pk-setup
 description: >-
-  Toolchain, Conan and the Conan cache for a verify/release target. Used by
-  verify.yml and release.yml to only have to set up target once in one place.
+  Toolchain, Conan, the Conan cache and optionally ccache for a verify/release
+  target. Used by workflows to only have to set up a target once.
 
 inputs:
   target:
@@ -11,17 +11,36 @@ inputs:
     description: MSYS2 environment (UCRT64, CLANG64, CLANGARM64), Windows only.
     default: ''
   cache:
-    description: "'save' restores & saves Conan cache, 'restore' doesn't save."
+    description: >-
+      'save' restores the Conan cache and saves it when the job succeeds,
+      'restore' doesn't save, 'manual' only restores and leaves saving to
+      caller (with the outputs conan-key and conan-hit).
     default: save
+  compiler-cache:
+    description: >-
+      'true' installs ccache (kit uses when found) and restores its cache.
+      Saving is up to the caller.
+    default: 'false'
   conan-version:
+    description: Conan version pip installs.
     default: '2.33.0'
   llvm-mingw-tag:
+    description: llvm-mingw release tag (cross-aarch64-mingw-llvm-w64 only).
     default: '20260616'
   llvm-mingw-asset:
-    # Linux x86_64 UCRT build of the pinned release.
+    description: Asset of that release to download (Linux x86_64 UCRT build).
     default: llvm-mingw-20260616-ucrt-ubuntu-22.04-x86_64.tar.xz
   llvm-mingw-sha256:
+    description: SHA-256 of that asset, checked before it is unpacked.
     default: 534b92e067b22a6b4441f48ae9240a3341b17825d04d577eab0cf85c44b4deda
+
+outputs:
+  conan-key:
+    description: Conan cache key for this target and its dependency files.
+    value: ${{ steps.conan-key.outputs.key }}
+  conan-hit:
+    description: "'true' when Conan cache was restored from conan-key."
+    value: ${{ steps.conan-save.outputs.cache-hit || steps.conan-restore.outputs.cache-hit }}
 
 runs:
   using: composite
@@ -50,9 +69,13 @@ runs:
       shell: bash
       env:
         TARGET: ${{ inputs.target }}
+        CCACHE: ${{ inputs.compiler-cache }}
       run: |
         packages=()
         command -v g++-14 >/dev/null || packages+=(g++-14)
+        if [ "$CCACHE" = true ]; then
+          command -v ccache >/dev/null || packages+=(ccache)
+        fi
         case "$TARGET" in
           cross-x86_64-mingw-w64)  packages+=(g++-mingw-w64-x86-64) ;;
           cross-aarch64-linux-gnu) command -v aarch64-linux-gnu-gcc >/dev/null || packages+=(g++-aarch64-linux-gnu) ;;
@@ -68,6 +91,15 @@ runs:
         fi
         echo "CC=gcc-14" >> "$GITHUB_ENV"
         echo "CXX=g++-14" >> "$GITHUB_ENV"
+
+    # No auto update: it can take longer than everything else in this action.
+    - name: Install ccache
+      if: runner.os == 'macOS' && inputs.compiler-cache == 'true'
+      shell: bash
+      env:
+        HOMEBREW_NO_AUTO_UPDATE: '1'
+        HOMEBREW_NO_INSTALL_CLEANUP: '1'
+      run: command -v ccache >/dev/null || brew install ccache
 
     - name: Install llvm-mingw
       if: inputs.target == 'cross-aarch64-mingw-llvm-w64'
@@ -106,6 +138,7 @@ runs:
           ninja:p
           python-pip:p
           pkgconf:p
+          ${{ inputs.compiler-cache == 'true' && 'ccache:p' || '' }}
 
     # Visual Studio is installed on the runner used, Conan prefers
     # MSVC on Windows, CC/CXX override it.
@@ -142,22 +175,60 @@ runs:
         fi
         echo "profiles=$profiles" >> "$GITHUB_OUTPUT"
 
+    - name: Conan cache key
+      id: conan-key
+      shell: bash
+      env:
+        TARGET: ${{ inputs.target }}
+        HASH: ${{ hashFiles('conanfile.py', 'deps.json', 'conan.lock', format('{0}/**', steps.tree.outputs.profiles)) }}
+      run: echo "key=conan-$TARGET-$HASH" >> "$GITHUB_OUTPUT"
+
     # The key is shared with verify.yml, and caches saved on main can be read
     # from every branch and tag: release runs will reuse verify's packages,
     # NEVER storing a wasteful second copy.
+    #
+    # The first restore key also matches '<key>-partial-...', the packages a
+    # verify run managed to build before it failed or ran out of time; the next
+    # run only builds what's missing.
     - if: inputs.cache == 'save'
+      id: conan-save
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ runner.temp }}/conan2/p
-        key: conan-${{ inputs.target }}-${{ hashFiles('conanfile.py', 'deps.json', 'conan.lock', format('{0}/**', steps.tree.outputs.profiles)) }}
-        restore-keys: conan-${{ inputs.target }}-
+        key: ${{ steps.conan-key.outputs.key }}
+        restore-keys: |
+          ${{ steps.conan-key.outputs.key }}
+          conan-${{ inputs.target }}-
 
-    - if: inputs.cache == 'restore'
+    - if: inputs.cache == 'restore' || inputs.cache == 'manual'
+      id: conan-restore
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ runner.temp }}/conan2/p
-        key: conan-${{ inputs.target }}-${{ hashFiles('conanfile.py', 'deps.json', 'conan.lock', format('{0}/**', steps.tree.outputs.profiles)) }}
-        restore-keys: conan-${{ inputs.target }}-
+        key: ${{ steps.conan-key.outputs.key }}
+        restore-keys: |
+          ${{ steps.conan-key.outputs.key }}
+          conan-${{ inputs.target }}-
+
+    # -------------------------------------------------------------------------
+    # Compiler cache
+    # -------------------------------------------------------------------------
+
+    - name: Point ccache at the runner temp directory
+      if: inputs.compiler-cache == 'true'
+      shell: bash
+      env:
+        DIR_VALUE: ${{ runner.temp }}/ccache
+      run: |
+        echo "CCACHE_DIR=$DIR_VALUE" >> "$GITHUB_ENV"
+        echo "CCACHE_MAXSIZE=500M" >> "$GITHUB_ENV"
+
+    - if: inputs.compiler-cache == 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/ccache
+        key: ccache-${{ inputs.target }}-${{ github.run_id }}
+        restore-keys: ccache-${{ inputs.target }}-
 
     - name: Detect the default Conan profile
       if: runner.os != 'Windows'
