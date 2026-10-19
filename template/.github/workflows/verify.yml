@@ -60,6 +60,10 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Free disk space
+        if: runner.os == 'Linux'
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
+
       # Toolchain, Conan, ccache and the caches (Conan's shared with release.yml).
       - uses: ./.github/actions/pk-setup
         id: setup
@@ -75,10 +79,12 @@ jobs:
         continue-on-error: true
         run: ./scripts/verify.py deps ${{ matrix.target }}
 
-      # Only packages are cached
+      # Only packages are cached; everything not ran is prunned
       - name: Trim the Conan cache
         if: always() && steps.deps.outcome != 'skipped'
-        run: conan cache clean "*"
+        run: |
+          conan cache clean "*"
+          conan remove "*" --lru=1d -c
 
       - name: Save the Conan cache
         if: always() && steps.deps.outcome != 'skipped'
