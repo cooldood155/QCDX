@@ -27,3 +27,6 @@ src/qcdx/_commit.py
 
 # conan create (test_package)
 CMakeUserPresets.json
+
+# personal in-project notes
+docs/notes/
