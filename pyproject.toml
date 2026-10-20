@@ -29,7 +29,7 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-tools = ["conan>=2.0,<3", "cmake>=3.30", "ninja"]
+tools = ["conan>=2.4,<3", "cmake>=3.30", "ninja"]
 
 [project.scripts]
 pk = "qcdx.cli:main"
