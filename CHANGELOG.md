@@ -33,6 +33,19 @@ and/or fixes that directly impact users and is not logged in this document.
 
 ### Added
 
+- `pk_create_app` generates `<name>/app_paths.hpp` and `.cpp` for C++
+  applications, or `<name>/app_paths.h` and `.c` for C-only ones:
+  `<name>::app_paths()` (C++) or `<name>_app_paths()` (C) returns the
+  executable's location, the app root (build tree or install prefix), shipped
+  resources, the per-user config, data, cache and log folders, home, temp and
+  the starting directory, all absolute and found at run time, plus the app's
+  name and version (`<name>::app_name` and `<name>::app_version` in C++,
+  `<NAME>_APP_NAME` and `<NAME>_APP_VERSION` in C). The C version returns
+  `NULL` on failure with the reason why gotten from `<name>_app_paths_error()`,
+  and links `Threads::Threads` outside Windows. `NO_APP_PATHS` opts out, so no
+  `app_paths.*` are generated or linked; `pk_add_app_paths` (`LANGUAGE C|CXX`)
+  adds it to any executable. `cmake/projectkit/docs/GENERATED_FILES.md`
+  explains it and how to generate custom headers and sources.
 - `verify.py deps`: runs only the `conan install` commands the selected
   targets stages run, once per build type, and builds nothing of the project.
   `pk verify deps` does the same.
@@ -51,6 +64,17 @@ and/or fixes that directly impact users and is not logged in this document.
   unchanged.
 - `verify.yml`: builds go through ccache, and its cache is saved by every
   run, including failed ones.
+
+### Fixed
+
+- `<PREFIX>_SA_OUTPUT=files` with clang-tidy won't fail configuration with "the
+  launcher script is missing" anymore: `<PREFIX>_SA_LAUNCHER` is treated as
+  the command it is (`<python>;<script>`), its last item is the script that
+  must exist, and just a single `.sh` wrapper is run through `sh`.
+- clang-tidy older than the version that added `--removed-arg` no longer
+  fails every file with "cannot specify -o when generating multiple output
+  files": the kit only passes `--removed-arg=-fno-keep-inline-dllexport` when
+  `clang-tidy --help` lists it as available.
 
 ## [0.2.0] - 2026-10-14
 
