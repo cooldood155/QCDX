@@ -266,6 +266,7 @@ my-project/
 | [`RELEASE.md`](cmake/projectkit/docs/RELEASE.md) | tagged releases: targets, archives, checks, signing |
 | [`PACKAGE.md`](cmake/projectkit/docs/PACKAGE.md) | Conan packaging, editable mode and uploads |
 | [`ANALYSER_LAUNCHER.md`](cmake/projectkit/docs/ANALYSER_LAUNCHER.md) | clang-tidy and cppcheck integration |
+| `GENERATED_FILES.md` (Coming Soon) | `app_paths`, the export header, and generating your own files |
 
 ## License
 
