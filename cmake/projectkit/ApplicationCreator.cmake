@@ -7,7 +7,8 @@ function(pk_create_app)
     REQUIRE_PUBLIC_HEADERS
     REQUIRE_PRIVATE_HEADERS
     NO_DEFAULT_LINKS
-    NO_INSTALL)
+    NO_INSTALL
+    NO_APP_PATHS)
 
   set(one_value_args
     NAME
@@ -239,6 +240,16 @@ function(pk_create_app)
     target_compile_definitions(${target} PRIVATE
       ${prefix}_VERSION_STRING="${PROJECT_VERSION}")
   endforeach()
+
+  # Generated <name>/app_paths.hpp for apps with C++, or <name>/app_paths.h
+  # for C-only apps (AppPaths.cmake).
+  if(NOT ARG_NO_APP_PATHS)
+    if("CXX" IN_LIST app_languages)
+      pk_add_app_paths(NAME ${ARG_NAME} TARGETS ${ARG_TARGET_NAME} LANGUAGE CXX)
+    elseif("C" IN_LIST app_languages)
+      pk_add_app_paths(NAME ${ARG_NAME} TARGETS ${ARG_TARGET_NAME} LANGUAGE C)
+    endif()
+  endif()
 
   if(ARG_NO_DEFAULT_LINKS)
     set(default_links NO_DEFAULT_LINKS)
