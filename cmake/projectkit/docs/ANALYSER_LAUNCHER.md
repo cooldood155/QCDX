@@ -85,7 +85,7 @@ All of these are cache variables created by `pk_setup_static_analysis`, with
 | `<PREFIX>_SA_OUTPUT` | `console` | `console`, or `files` to also write reports. The launcher is only used for `files`. |
 | `<PREFIX>_SA_OUTPUT_DIR` | `${PROJECT_BINARY_DIR}/analysis` | Report root. Clang-tidy writes to `<dir>/clang-tidy`, cppcheck to `<dir>/cppcheck`. |
 | `<PREFIX>_SA_MESSAGE_FORMAT` | `default` | cppcheck template: `default`, `gcc` or `vs`. Pick `gcc` for editors that parse GCC diagnostics. |
-| `<PREFIX>_SA_LAUNCHER` | the kit's script | Override to use your own wrapper. |
+| `<PREFIX>_SA_LAUNCHER` | `<python>;<kit>/scripts/analyser_launcher.py` | The wrapper command: a list whose last item is the script. Override to use your own wrapper. |
 | `<PREFIX>_WERROR` | `OFF` | Adds `--warnings-as-errors=*` for clang-tidy and `--error-exitcode=1` for cppcheck. |
 
 Typical invocations:
@@ -118,9 +118,13 @@ object file is still produced by the compiler itself.
 
 ## 5. Using a different wrapper
 
-Point the cache variable at your own script. It must keep the same contract:
+Point the cache variable at your own wrapper. It must keep the same contract:
 first argument is the report directory, the rest is the command to run, output
 goes to stdout, exit code passes through.
+
+The value is a command, so it can name the interpreter too
+(`-DETESCA_SA_LAUNCHER="python3;/k/tools/my-launcher.py"`). A `.sh` file is run
+through `sh` to make it work on Windows; any other file must be executable.
 
 ```bash
 cmake --preset native-debug \
@@ -129,15 +133,15 @@ cmake --preset native-debug \
   -DETESCA_SA_LAUNCHER=/k/tools/my-launcher.sh
 ```
 
-The configure fails immediately if that file does not exist, rather than
-failing later on the first compiled file.
+The configure fails immediately if the script (the last item) does not exist,
+rather than failing later on the first compiled file.
 
 ## 6. Running it by hand
 
 Useful when the wrapper itself is suspect:
 
 ```bash
-sh cmake/projectkit/scripts/analyser_launcher.py /tmp/reports \
+python3 cmake/projectkit/scripts/analyser_launcher.py /tmp/reports \
   clang-tidy src/etesca/core.cpp -- -std=c++23 -Iinclude
 echo "exit=$?"
 ls /tmp/reports
@@ -147,8 +151,9 @@ ls /tmp/reports
 
 | symptom | cause |
 | --------------------------------------------------- | ----- |
-| Configure fails with `the launcher script is missing` | `<PREFIX>_SA_LAUNCHER` points at a path that does not exist. |
+| Configure fails with `the launcher script is missing` | The last item of `<PREFIX>_SA_LAUNCHER` is a path that does not exist. |
 | Reports never appear | `<PREFIX>_SA_OUTPUT` is still `console`, or the analyser found nothing, in which case the empty report is deleted on purpose. |
 | Report named `unknown-source` | The analyser was invoked without a recognisable source argument. Check what CMake put in `CXX_CLANG_TIDY`. |
 | The build no longer fails on findings | `<PREFIX>_WERROR` is off. The launcher does not add severity of its own. |
-| `sh: not found` on Windows | The configure looks for `sh` on PATH. In MSYS2 it is present; outside MSYS2 it may not be. |
+| `sh: not found` on Windows | Only a `.sh` wrapper needs `sh` on PATH. In MSYS2 it is present; outside MSYS2 it may not be. The default Python launcher doesn't need it. |
+| Every file fails with `cannot specify -o when generating multiple output files` | A clang-tidy older than the kit expects was given `--removed-arg`. The kit now only passes it when `clang-tidy --help` lists it; reconfigure. |

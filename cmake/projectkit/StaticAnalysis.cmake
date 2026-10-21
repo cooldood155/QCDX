@@ -67,23 +67,44 @@ function(pk_setup_static_analysis)
     set(clang_tidy_command
       "${${prefix}_CLANG_TIDY_PATH}"
       "--extra-arg=-Wno-unknown-warning-option"
-      "--extra-arg=-Wno-unused-command-line-argument"
-      "--removed-arg=-fno-keep-inline-dllexport")
+      "--extra-arg=-Wno-unused-command-line-argument")
+
+    # GCC on MinGW passes -fno-keep-inline-dllexport and clang rejects it.
+    # Only newer clang-tidy has --removed-arg; an older one fails.
+    execute_process(
+      COMMAND "${${prefix}_CLANG_TIDY_PATH}" --help
+      OUTPUT_VARIABLE tidy_help
+      ERROR_QUIET)
+    if(tidy_help MATCHES "--removed-arg")
+      list(APPEND clang_tidy_command "--removed-arg=-fno-keep-inline-dllexport")
+    endif()
 
     if(${prefix}_SA_OUTPUT STREQUAL "files")
-      find_program(${prefix}_SH_PATH NAMES sh REQUIRED)
+      # The launcher is a command: the default is "<python>;<launcher.py>",
+      # an override can just be a single script.
+      set(launcher_command ${${prefix}_SA_LAUNCHER})
+      if(NOT launcher_command)
+        message(FATAL_ERROR
+          "${prefix}_SA_OUTPUT is files but ${prefix}_SA_LAUNCHER is empty.")
+      endif()
+      list(GET launcher_command -1 launcher_script)
 
-      if(NOT EXISTS "${${prefix}_SA_LAUNCHER}")
+      if(NOT EXISTS "${launcher_script}")
         message(FATAL_ERROR
           "${prefix}_SA_OUTPUT is files but the launcher script is missing: "
-          "'${${prefix}_SA_LAUNCHER}'")
+          "'${launcher_script}'")
+      endif()
+
+      list(LENGTH launcher_command launcher_length)
+      if(launcher_length EQUAL 1 AND launcher_script MATCHES "\\.sh$")
+        find_program(${prefix}_SH_PATH NAMES sh REQUIRED)
+        list(PREPEND launcher_command "${${prefix}_SH_PATH}")
       endif()
 
       file(MAKE_DIRECTORY "${${prefix}_SA_OUTPUT_DIR}/clang-tidy")
 
       list(PREPEND clang_tidy_command
-        "${${prefix}_SH_PATH}"
-        "${${prefix}_SA_LAUNCHER}"
+        ${launcher_command}
         "${${prefix}_SA_OUTPUT_DIR}/clang-tidy")
     endif()
 
