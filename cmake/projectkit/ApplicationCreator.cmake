@@ -8,13 +8,17 @@ function(pk_create_app)
     REQUIRE_PRIVATE_HEADERS
     NO_DEFAULT_LINKS
     NO_INSTALL
-    NO_APP_PATHS)
+    NO_APP_PATHS
+    GUI
+    OWN_MANIFEST
+    STATIC_RUNTIME)
 
   set(one_value_args
     NAME
     LANGUAGE
     SOURCE_DIR
-    INCLUDE_DIR)
+    INCLUDE_DIR
+    RC_FILE)
 
   set(multi_value_args
     TARGET_NAME
@@ -77,6 +81,38 @@ function(pk_create_app)
     message(FATAL_ERROR
       "pk_create_app (func): '${ARG_NAME}' has duplicate 'OUTPUT_NAME' "
       "values: ${ARG_OUTPUT_NAME}")
+  endif()
+
+  if(ARG_RC_FILE)
+    cmake_path(ABSOLUTE_PATH ARG_RC_FILE
+      BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" NORMALIZE)
+    if(NOT EXISTS "${ARG_RC_FILE}")
+      message(FATAL_ERROR
+        "pk_create_app (func): 'RC_FILE' for '${ARG_NAME}' does not exist: "
+        "'${ARG_RC_FILE}'.")
+    endif()
+    get_property(enabled_languages GLOBAL PROPERTY ENABLED_LANGUAGES)
+    if(WIN32 AND NOT "RC" IN_LIST enabled_languages)
+      message(FATAL_ERROR
+        "pk_create_app (func): 'RC_FILE' for '${ARG_NAME}' needs the RC "
+        "language; call enable_language(RC) before pk_create_app.")
+    endif()
+  endif()
+
+  if(MINGW AND ARG_OWN_MANIFEST)
+    if(CMAKE_C_COMPILER)
+      set(stub_compiler "${CMAKE_C_COMPILER}")
+    else()
+      set(stub_compiler "${CMAKE_CXX_COMPILER}")
+    endif()
+    set(no_manifest_dir "${CMAKE_CURRENT_BINARY_DIR}/${ARG_NAME}_no_default_manifest")
+    if(NOT EXISTS "${no_manifest_dir}/default-manifest.o")
+      file(WRITE "${no_manifest_dir}/empty.c" "")
+      execute_process(
+        COMMAND "${stub_compiler}" -c empty.c -o default-manifest.o
+        WORKING_DIRECTORY "${no_manifest_dir}"
+        COMMAND_ERROR_IS_FATAL ANY)
+    endif()
   endif()
 
   pk_resolve_files(ARG_SOURCES "'${ARG_NAME}' SOURCES"
@@ -239,6 +275,19 @@ function(pk_create_app)
 
     target_compile_definitions(${target} PRIVATE
       ${prefix}_VERSION_STRING="${PROJECT_VERSION}")
+
+    if(ARG_GUI)
+      set_target_properties(${target} PROPERTIES WIN32_EXECUTABLE TRUE)
+    endif()
+    if(WIN32 AND ARG_RC_FILE)
+      target_sources(${target} PRIVATE "${ARG_RC_FILE}")
+    endif()
+    if(MINGW AND ARG_OWN_MANIFEST)
+      target_link_options(${target} PRIVATE "-B${no_manifest_dir}/")
+    endif()
+    if(MINGW AND ARG_STATIC_RUNTIME)
+      target_link_options(${target} PRIVATE -static)
+    endif()
   endforeach()
 
   # Generated <name>/app_paths.hpp for apps with C++, or <name>/app_paths.h
