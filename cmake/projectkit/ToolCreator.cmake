@@ -124,16 +124,9 @@ function(pk_create_tool)
     EXPORT_NAME ${ARG_EXPORT_NAME}
     RUNTIME_OUTPUT_DIRECTORY ${ARG_ROUT_DIR})
 
-  if(NOT ARG_EXPORT_NAMESPACE)
-    export(TARGETS ${ARG_NAME}
-      APPEND
-      FILE "${ARG_EXPORT_FILE}")
-  else()
-    export(TARGETS ${ARG_NAME}
-      APPEND
-      NAMESPACE ${ARG_EXPORT_NAMESPACE}
-      FILE "${ARG_EXPORT_FILE}")
-  endif()
+  export(TARGETS ${ARG_NAME}
+    NAMESPACE ${ARG_EXPORT_NAMESPACE}
+    FILE "${ARG_EXPORT_FILE}")
 
   pk_register_targets(TOOL TARGETS ${ARG_NAME})
 endfunction()
