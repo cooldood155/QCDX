@@ -193,6 +193,31 @@ pk_create_app(
 `TARGET_NAME` accepts several names when one set of sources should produce more
 than one executable, with `OUTPUT_NAME` matched to it one for one.
 
+C and C++ applications also gets a generated `<project>/app_paths.h` (C) or
+`<project>/app_paths.hpp` (C++), providing the program's location on the system
+and the per-user config, data, cache and log folders, all found when the
+program runs:
+
+```cpp
+#include <myproject/app_paths.hpp>
+
+std::ofstream log{myproject::app_paths().logs / "myproject.log", std::ios::app};
+```
+
+```c
+#include <myproject/app_paths.h>
+
+const myproject_paths* paths = myproject_app_paths();
+if (paths == NULL) {
+    fprintf(stderr, "%s\n", myproject_app_paths_error());
+    return 1;
+}
+printf("Settings are in %s\n", paths->config);
+```
+
+`cmake/projectkit/docs/GENERATED_FILES.md` explains how these work and how to
+generate custom headers and sources.
+
 ### 5.3 Tests
 
 Sources in `tests/<project>/`, and in `tests/CMakeLists.txt`:
