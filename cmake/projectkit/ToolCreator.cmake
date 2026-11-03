@@ -125,6 +125,7 @@ function(pk_create_tool)
     RUNTIME_OUTPUT_DIRECTORY ${ARG_ROUT_DIR})
 
   export(TARGETS ${ARG_NAME}
+    APPEND
     NAMESPACE ${ARG_EXPORT_NAMESPACE}
     FILE "${ARG_EXPORT_FILE}")
 

@@ -215,7 +215,7 @@ if (paths == NULL) {
 printf("Settings are in %s\n", paths->config);
 ```
 
-`cmake/projectkit/docs/GENERATED_FILES.md` explains how these work and how to
+`docs/GENERATED_FILES.md` explains how these work and how to
 generate custom headers and sources.
 
 ### 5.3 Tests
@@ -374,11 +374,12 @@ The kit is vendored: every project keeps its own copy under
 
 The template is fetched from GitHub, and only its changes since the last sync
 are applied, as a 3-way merge, to `cmake/projectkit` and the `pk.py`,
-`verify.py`, `package.py` and `bootstrap.py` wrappers. Changes you made to the kit in this
-project are kept; where both sides changed the same lines you get conflict
-markers to resolve, and `git reset --merge` undoes the whole sync. The result
-is one commit, together with `scripts/helpers/pk/upstream.conf`, which records
-the template commit for the next sync.
+`verify.py`, `package.py` and `bootstrap.py` wrappers. Changes you made to
+the kit in this project are kept; where both sides changed the same lines you
+get conflict markers to resolve, and `git reset --merge` undoes the whole
+sync. The result is one commit, together with
+`scripts/helpers/pk/upstream.conf`, which records the template commit for the
+next sync.
 
 Run it once right after creating the project, even with nothing to update:
 that first sync records which template commit the kit came from, so every later

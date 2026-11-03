@@ -1,12 +1,13 @@
 include_guard(GLOBAL)
 
-include(CheckCXXCompilerFlag)
+include(CheckCompilerFlag)
 include(CheckLinkerFlag)
 include(CheckIPOSupported)
 
 function(pk_try_compile_option target condition flag)
+  pk_main_language(language)
   string(MAKE_C_IDENTIFIER "${PROJECT_NAME}_has_c_${flag}" probe)
-  check_cxx_compiler_flag("${flag}" ${probe})
+  check_compiler_flag(${language} "${flag}" ${probe})
 
   if(${probe})
     target_compile_options(${target} INTERFACE "$<${condition}:${flag}>")
@@ -14,8 +15,9 @@ function(pk_try_compile_option target condition flag)
 endfunction()
 
 function(pk_try_link_option target condition flag)
+  pk_main_language(language)
   string(MAKE_C_IDENTIFIER "${PROJECT_NAME}_has_l_${flag}" probe)
-  check_linker_flag(CXX "${flag}" ${probe})
+  check_linker_flag(${language} "${flag}" ${probe})
 
   if(${probe})
     target_link_options(${target} INTERFACE "$<${condition}:${flag}>")
@@ -25,38 +27,41 @@ endfunction()
 macro(pk_add_options_target)
   pk_project_prefix(PK_PREFIX)
   set(_pk_target "${PROJECT_NAME}_options")
+  pk_main_language(_pk_main_lang)
 
   set(${PK_PREFIX}_SANITIZE "" CACHE STRING
-    "Comma-separated sanitizers to build with, e.g. address, undefined, or thread; address, thread, leak, memory, and undefined are the sanitizers")
+    "Comma-separated sanitizers: address, thread, leak, memory, undefined")
 
-  option(${PK_PREFIX}_HARDENING    "Compile and link with hardening flags"       ON)
-  option(${PK_PREFIX}_COVERAGE     "Instrument for coverage"                     OFF)
-  option(${PK_PREFIX}_REPRODUCIBLE "Strip build paths out of binaries"           OFF)
-  option(${PK_PREFIX}_LTO          "Enable interprocedural optimization"         OFF)
-  option(${PK_PREFIX}_CCACHE       "Use ccache or sccache when one is installed" ON)
-  option(${PK_PREFIX}_REDUCE_SIZE  "Strip unecessary/dead code and unroll loops" ON)
+  option(${PK_PREFIX}_HARDENING "Compile and link with hardening flags" ON)
+  option(${PK_PREFIX}_COVERAGE "Instrument for coverage" OFF)
+  option(${PK_PREFIX}_REPRODUCIBLE "Strip build paths out of binaries" OFF)
+  option(${PK_PREFIX}_LTO "Enable interprocedural optimization" OFF)
+  option(${PK_PREFIX}_CCACHE "Use ccache or sccache when one is installed" ON)
+  option(${PK_PREFIX}_REDUCE_SIZE "Strip dead code and unroll loops" ON)
 
   add_library(${_pk_target} INTERFACE)
   add_library(${PROJECT_NAME}::options ALIAS ${_pk_target})
   set_target_properties(${_pk_target} PROPERTIES EXPORT_NAME options)
 
   set(_pk_gnu_ids "GNU,Clang,AppleClang,IntelLLVM")
-  set(_pk_gnu_like
-    "$<OR:$<COMPILE_LANG_AND_ID:C,${_pk_gnu_ids}>,$<COMPILE_LANG_AND_ID:CXX,${_pk_gnu_ids}>>")
+  string(CONCAT _pk_gnu_like
+    "$<OR:$<COMPILE_LANG_AND_ID:C,${_pk_gnu_ids}>,"
+    "$<COMPILE_LANG_AND_ID:CXX,${_pk_gnu_ids}>>")
   set(_pk_msvc
     "$<OR:$<COMPILE_LANG_AND_ID:C,MSVC>,$<COMPILE_LANG_AND_ID:CXX,MSVC>>")
 
-  if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU")
+  if(CMAKE_${_pk_main_lang}_COMPILER_FRONTEND_VARIANT STREQUAL "GNU")
     set(${PK_PREFIX}_COMPILER_LIKE_GNU ON CACHE INTERNAL "")
     set(${PK_PREFIX}_COMPILER_IS_MSVC OFF CACHE INTERNAL "")
     set(_pk_compiler "${_pk_gnu_like}")
-  elseif(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+  elseif(CMAKE_${_pk_main_lang}_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
     set(${PK_PREFIX}_COMPILER_LIKE_GNU OFF CACHE INTERNAL "")
     set(${PK_PREFIX}_COMPILER_IS_MSVC ON CACHE INTERNAL "")
     set(_pk_compiler "${_pk_msvc}")
   else()
     message(FATAL_ERROR
-      "Unsupported compiler front-end: ${CMAKE_CXX_COMPILER_FRONTEND_VARIANT}")
+      "Unsupported compiler front-end: "
+      "${CMAKE_${_pk_main_lang}_COMPILER_FRONTEND_VARIANT}")
   endif()
 
   if(${PK_PREFIX}_SANITIZE)
@@ -110,14 +115,16 @@ macro(pk_add_options_target)
       "${PK_PREFIX}_HAS_SANITIZE_${${PK_PREFIX}_SANITIZE}" _pk_sanitize_probe)
 
     set(CMAKE_REQUIRED_LINK_OPTIONS "${_pk_sanitize_flag}")
-    check_cxx_compiler_flag("${_pk_sanitize_flag}" ${_pk_sanitize_probe})
+    check_compiler_flag(${_pk_main_lang} "${_pk_sanitize_flag}"
+      ${_pk_sanitize_probe})
     unset(CMAKE_REQUIRED_LINK_OPTIONS)
 
     if(NOT ${_pk_sanitize_probe})
-      if(MINGW AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      if(MINGW AND CMAKE_${_pk_main_lang}_COMPILER_ID STREQUAL "GNU")
         message(FATAL_ERROR
           "Windows/MinGW has no sanitizer runtimes for Windows targets. "
-          "Use Clang (pacman -S mingw-w64-ucrt-x86_64-clang) or build under WSL.")
+          "Use Clang (pacman -S mingw-w64-ucrt-x86_64-clang) or build under "
+          "WSL.")
       else()
         message(FATAL_ERROR
           "This toolchain cannot build with ${_pk_sanitize_flag}; the runtime "
@@ -128,10 +135,10 @@ macro(pk_add_options_target)
     if(${PK_PREFIX}_COMPILER_IS_MSVC)
       foreach(_pk_lang IN ITEMS C CXX)
         foreach(_pk_config RELEASE RELWITHDEBINFO MINSIZEREL)
-          set(_pk_flags_var CMAKE_${_pk_lang}_FLAGS_${_pk_config})
-          string(REPLACE "/O2" "/O2 /Oy-" ${_pk_flags_var} "${${_pk_flags_var}}")
-          string(REPLACE "/O1" "/O1 /Oy-" ${_pk_flags_var} "${${_pk_flags_var}}")
-          string(REPLACE "/Oy- /Oy-" "/Oy-" ${_pk_flags_var} "${${_pk_flags_var}}")
+          set(_pk_var CMAKE_${_pk_lang}_FLAGS_${_pk_config})
+          string(REPLACE "/O2" "/O2 /Oy-" ${_pk_var} "${${_pk_var}}")
+          string(REPLACE "/O1" "/O1 /Oy-" ${_pk_var} "${${_pk_var}}")
+          string(REPLACE "/Oy- /Oy-" "/Oy-" ${_pk_var} "${${_pk_var}}")
         endforeach()
       endforeach()
     endif()
@@ -141,10 +148,13 @@ macro(pk_add_options_target)
 
   if(${PK_PREFIX}_HARDENING)
     if(${PK_PREFIX}_COMPILER_LIKE_GNU)
-      pk_try_compile_option(${_pk_target} "${_pk_compiler}" -fstack-protector-strong)
-      pk_try_compile_option(${_pk_target} "${_pk_compiler}" -fstack-clash-protection)
-      pk_try_compile_option(${_pk_target} "${_pk_compiler}" -fcf-protection=full)
-      pk_try_compile_option(${_pk_target} "${_pk_compiler}" -ftrivial-auto-var-init=zero)
+      foreach(_pk_flag IN ITEMS
+          -fstack-protector-strong
+          -fstack-clash-protection
+          -fcf-protection=full
+          -ftrivial-auto-var-init=zero)
+        pk_try_compile_option(${_pk_target} "${_pk_compiler}" ${_pk_flag})
+      endforeach()
 
       target_compile_definitions(${_pk_target} INTERFACE
         "$<$<COMPILE_LANG_AND_ID:CXX,${_pk_gnu_ids}>:_GLIBCXX_ASSERTIONS>")
@@ -163,10 +173,11 @@ macro(pk_add_options_target)
     endif()
 
     if(NOT ${PK_PREFIX}_SANITIZE)
+      set(_pk_release "$<NOT:$<CONFIG:Debug>>")
+      set(_pk_msvc_cxx "$<COMPILE_LANG_AND_ID:CXX,MSVC>")
       target_compile_definitions(${_pk_target} INTERFACE
-        "$<$<AND:${_pk_gnu_like},$<NOT:$<CONFIG:Debug>>>:_FORTIFY_SOURCE=3>")
-      target_compile_definitions(${_pk_target} INTERFACE
-        "$<$<AND:$<COMPILE_LANG_AND_ID:CXX,MSVC>,$<NOT:$<CONFIG:Debug>>>:_SECURE_SCL=1>")
+        "$<$<AND:${_pk_gnu_like},${_pk_release}>:_FORTIFY_SOURCE=3>"
+        "$<$<AND:${_pk_msvc_cxx},${_pk_release}>:_SECURE_SCL=1>")
     endif()
 
     message(STATUS "${PROJECT_NAME}: hardening enabled")

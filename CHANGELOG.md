@@ -1,9 +1,11 @@
 # Changelog
 
-All notable changes to this project, directly impacting users, are recorded here.
+All notable changes to this project, directly impacting users, are recorded
+here.
 
 The format is [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) and
-the version numbers follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html).
+the version numbers follow
+[Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html).
 
 What a major, minor or patch bump *means* for this project's ABI is in
 [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md); the release procedure is in
@@ -29,6 +31,8 @@ and/or fixes that directly impact users and is not logged in this document.
 
 ### Security -->
 
+## [Unreleased]
+
 ## [0.3.0] - 2026-11-03
 
 ### Added
@@ -44,8 +48,8 @@ and/or fixes that directly impact users and is not logged in this document.
   `NULL` on failure with the reason why gotten from `<name>_app_paths_error()`,
   and links `Threads::Threads` outside Windows. `NO_APP_PATHS` opts out, so no
   `app_paths.*` are generated or linked; `pk_add_app_paths` (`LANGUAGE C|CXX`)
-  adds it to any executable. `cmake/projectkit/docs/GENERATED_FILES.md`
-  explains it and how to generate custom headers and sources.
+  adds it to any executable. `docs/GENERATED_FILES.md` explains it and how
+  to generate custom headers and sources.
 - `verify.py deps`: runs only the `conan install` commands the selected
   targets stages run, once per build type, and builds nothing of the project.
   `pk verify deps` does the same.
@@ -53,6 +57,12 @@ and/or fixes that directly impact users and is not logged in this document.
   outputs `conan-key` and `conan-hit`) and `compiler-cache: 'true'` (installs
   ccache, which the kit already uses when it finds one, and restores its
   cache).
+- `pk_create_app` Windows options, all off by default: `GUI` builds a
+  windowed app (`WIN32_EXECUTABLE`), with no console; `RC_FILE` adds a
+  resource script (call `enable_language(RC)` first); and, for MinGW only,
+  `OWN_MANIFEST` leaves out the toolchain's default manifest so the one in
+  your resources is used, and `STATIC_RUNTIME` links the runtime statically
+  (`-static`).
 
 ### Changed
 
@@ -64,6 +74,8 @@ and/or fixes that directly impact users and is not logged in this document.
   unchanged.
 - `verify.yml`: builds go through ccache, and its cache is saved by every
   run, including failed ones.
+- The `tools` extra (`pipx install "qcdx[tools]"`) now needs Conan 2.4 or
+  newer, up from 2.0.
 
 ### Fixed
 
@@ -75,6 +87,17 @@ and/or fixes that directly impact users and is not logged in this document.
   fails every file with "cannot specify -o when generating multiple output
   files": the kit only passes `--removed-arg=-fno-keep-inline-dllexport` when
   `clang-tidy --help` lists it as available.
+- clangd in new projects reads the `compile_commands.json` that pk links at
+  the project root, instead of `build/native-release`, which only existed
+  after a Release configuration. It also drops the GCC-only
+  `-fno-keep-inline-dllexport` flag.
+- `verify.yml` on Linux no longer fails with "No space left on device" while
+  restoring the Conan cache: `pk-setup` frees runner disk first, and
+  packages unused for a day are pruned before the cache is saved.
+- C-only projects (`project(... LANGUAGES C)`) configure again:
+  `pk_project_setup` failed with "requires a mainstream compiler" because it
+  only looked at the C++ compiler, and the flag, linker and sanitizer checks
+  needed C++ too. They now use C++ when it is enabled and C otherwise.
 
 ## [0.2.0] - 2026-10-14
 
@@ -95,6 +118,22 @@ and/or fixes that directly impact users and is not logged in this document.
   project `pk tree` lists the trees `pk new` takes.
 - `pk_tree_dir()`, `pk_tree_has()` and `pk_tree_base_dir()` in
   `Layout.cmake`. The creators' default folders come from the tree.
+- `pk list` outside a project: every project the global `pk` knows, with its
+  name, kit version, last use and path. `pk new` remembers a project, and so
+  does every `pk` command run inside one. Moved or deleted projects show as
+  missing; `pk list --prune` forgets them. The registry is
+  `~/.pk/projects.json` (`PK_HOME` moves it).
+- `pre-commit-config.yaml`: every commit is linted before being staged. The
+  template gets its own pre-commit-config as well, which is optional and can be
+  deleted by users in their new projects if wanted.
+- `template-sync.yml`: after every successful release (or when run by hand),
+  generates the project with `pk new qcdx` and pushes the difference to
+  [QCDX-template](https://github.com/cooldood155/QCDX-template) as one commit,
+  with the template repository's own README, plus LICENSE, CHANGELOG and docs.
+  This requires the `TEMPLATE_REPO_TOKEN` secret.
+- `PK_RELEASE_SYNC` release setting: repository files (e.g. `CHANGELOG.md`)
+  kept in sync with the root of the releases repository under their own names,
+  the same way `PK_RELEASE_README` keeps its `README.md` in sync.
 
 ### Changed
 
@@ -110,7 +149,7 @@ and/or fixes that directly impact users and is not logged in this document.
   ...). `pk new` will note if the kit uses the name as a word.
 - `pk new`: a missing NAME and an option written with a space (`--tree
   minimal`) are now reported as such. An interrupted first commit is reported
-  instead of just ending `pk new` silently.. (the files stay staged).
+  instead of just ending `pk new` silently (the files stay staged).
 
 ### Fixed
 
@@ -118,38 +157,14 @@ and/or fixes that directly impact users and is not logged in this document.
   Renaming a project named `test` (when pk didn't block it) would change
   the `tests/` directory and `skip_test` Conan profile setting. Now only whole
   parts of identifiers are renamed (`test_app`, `TEST_BUILD_TESTS`,
-  `testConfig`). Setting a projects name to one the kit uses as a word of its
+  `testConfig`). Setting a project's name to one the kit uses as a word of its
   own is stopped without changing anything (`--allow-ambiguous` renames it
-  anyways).
+  anyway).
 - `pk sync` on Windows using MSYS2's git and native Python (UCRT64, MINGW64)
   would fail with "no commit in upstream touches". MSYS2 expands braces within
   arguments of an MSYS program (git) started from a native one (Python), and
   `^{commit}` reached git as `^commit`. Revisions are now written as `^0`,
   meaning the same thing.
-
-## [0.1.1] - 2026-10-14
-
-### Added
-
-- `pk list` outside a project: every project the global `pk` knows, with its
-  name, kit version, last use and path. `pk new` remembers a project, and so
-  does every `pk` command run inside one. Moved or deleted projects show as
-  missing; `pk list --prune` forgets them. The registry is
-  `~/.pk/projects.json` (`PK_HOME` moves it).
-- `pre-commit-config.yaml`: every commit is linted before being staged. The
-  template gets its own pre-commit-config as well, which is optional and can be
-  deleted by users in their new projects if wanted.
-- `template-sync.yml`: after every successful release (or when ran by hand),
-  generates the project with `pk new qcdx` and pushes the difference to
-  [QCDX-template](https://github.com/cooldood155/QCDX-template) as one commit,
-  with the template repository's own README, plus LICENSE, CHANGELOG and docs.
-  This requires the `TEMPLATE_REPO_TOKEN` secret.
-- `PK_RELEASE_SYNC` release setting: repository files (e.g. `CHANGELOG.md`)
-  kept in sync with the root of the releases repository under their own names,
-  the same way `PK_RELEASE_README` keeps its `README.md` in sync.
-
-### Fixed
-
 - `pk new`: `--description` and `--version` were ignored when NAME was the
   template's own name (`qcdx`). Both are now always applied to `CMakeLists.txt`
   and the Conan recipe.
@@ -238,5 +253,4 @@ with a global `pk` command that creates projects and works inside them.
 [Unreleased]: https://github.com/cooldood155/QCDX/compare/v0.3.0...HEAD
 [0.3.0]: https://github.com/cooldood155/QCDX/releases/tag/v0.3.0
 [0.2.0]: https://github.com/cooldood155/QCDX/releases/tag/v0.2.0
-[0.1.1]: https://github.com/cooldood155/QCDX/releases/tag/v0.1.1
 [0.1.0]: https://github.com/cooldood155/QCDX/releases/tag/v0.1.0

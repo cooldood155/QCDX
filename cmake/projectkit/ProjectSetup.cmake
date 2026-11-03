@@ -6,6 +6,15 @@ function(pk_project_prefix OUT_VAR)
   set(${OUT_VAR} "${prefix}" PARENT_SCOPE)
 endfunction()
 
+function(pk_main_language OUT_VAR)
+  get_property(languages GLOBAL PROPERTY ENABLED_LANGUAGES)
+  if("CXX" IN_LIST languages)
+    set(${OUT_VAR} CXX PARENT_SCOPE)
+  else()
+    set(${OUT_VAR} C PARENT_SCOPE)
+  endif()
+endfunction()
+
 function(pk_register_targets KIND)
   cmake_parse_arguments(ARG "" "" "TARGETS" ${ARGN})
 
@@ -80,10 +89,12 @@ macro(pk_project_setup)
       "In-source builds are not supported, please use a build directory")
   endif()
 
-  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang|IntelLLVM|MSVC)$")
+  pk_main_language(_pk_main_lang)
+  set(_pk_compiler_id "${CMAKE_${_pk_main_lang}_COMPILER_ID}")
+  if(NOT _pk_compiler_id MATCHES "^(GNU|Clang|AppleClang|IntelLLVM|MSVC)$")
     message(FATAL_ERROR
       "This project requires a mainstream compiler; found: "
-      "${CMAKE_CXX_COMPILER_ID}")
+      "'${_pk_compiler_id}'")
   endif()
 
   option(${PK_PREFIX}_BUILD_APPS "Build ${PROJECT_NAME} applications"
@@ -94,10 +105,11 @@ macro(pk_project_setup)
     ${PROJECT_IS_TOP_LEVEL})
   option(${PK_PREFIX}_WERROR "Treat warnings as errors" OFF)
 
+  set(_pk_library_types STATIC SHARED "STATIC+SHARED" NONE)
   set(${PK_PREFIX}_LIBRARY_TYPE "${_PK_LIBRARY_TYPE}" CACHE STRING
-    "Library artifacts to build: STATIC, SHARED, STATIC+SHARED, NONE, or empty to follow BUILD_SHARED_LIBS")
+    "STATIC, SHARED, STATIC+SHARED or NONE; empty follows BUILD_SHARED_LIBS")
   set_property(CACHE ${PK_PREFIX}_LIBRARY_TYPE
-    PROPERTY STRINGS "" STATIC SHARED "STATIC+SHARED" NONE)
+    PROPERTY STRINGS "" ${_pk_library_types})
 
   if(NOT ${PK_PREFIX}_LIBRARY_TYPE)
     if(BUILD_SHARED_LIBS)
@@ -108,7 +120,7 @@ macro(pk_project_setup)
     set(${PK_PREFIX}_LIBRARY_TYPE_FOLLOWS_BUILD_SHARED_LIBS TRUE)
   endif()
 
-  if(NOT ${PK_PREFIX}_LIBRARY_TYPE MATCHES "^(STATIC|SHARED|STATIC\\+SHARED|NONE)$")
+  if(NOT ${PK_PREFIX}_LIBRARY_TYPE IN_LIST _pk_library_types)
     message(FATAL_ERROR
       "${PK_PREFIX}_LIBRARY_TYPE must be STATIC, SHARED, STATIC+SHARED or "
       "NONE, not '${${PK_PREFIX}_LIBRARY_TYPE}'")

@@ -23,7 +23,8 @@ absolute paths, without a single path typed into the code:
 ```cpp
 #include <myproject/app_paths.hpp>
 
-const auto& paths = myproject::app_paths();   // first thing in main() or OnInit()
+// first thing in main() or OnInit()
+const auto& paths = myproject::app_paths();
 
 std::ofstream log{paths.logs / "myproject.log", std::ios::app};
 auto icon = paths.resources / "icons" / "app.png";
@@ -106,13 +107,13 @@ What CMake does know, and what doesn't change, is the *shape* of the layout.
 in `share`. So the work is split:
 
 ```plaintext
-CMake, while configuring              the program, when it runs
-------------------------              -------------------------
-CMAKE_INSTALL_BINDIR  = bin           asks the OS for its own path:
-CMAKE_INSTALL_DATADIR = share           C:\Apps\myproject\bin\myproject.exe
-  bin -> root = ".."                  bin_dir   = C:\Apps\myproject\bin
-                                      root      = bin_dir\..  = C:\Apps\myproject
-writes ".." and "share"               resources = root\share\myproject
+CMake, while configuring          the program, when it runs
+------------------------          -------------------------
+CMAKE_INSTALL_BINDIR  = bin       asks the OS for its own path:
+CMAKE_INSTALL_DATADIR = share       C:\Apps\myproject\bin\myproject.exe
+  bin -> root = ".."              bin_dir   = C:\Apps\myproject\bin
+                                  root      = bin_dir\..  = C:\Apps\myproject
+writes ".." and "share"           resources = root\share\myproject
 into app_paths.cpp
 ```
 
@@ -143,15 +144,16 @@ re-runs, so it uses `configure_file`.
 
 ### `pk_add_app_paths`, step by step
 
-The whole thing is [`AppPaths.cmake`](../AppPaths.cmake) and two templates in
-[`templates/app_paths/`](../templates/app_paths/).
+The whole thing is
+[`AppPaths.cmake`](../cmake/projectkit/AppPaths.cmake) and two templates in
+[`templates/app_paths/`](../cmake/projectkit/templates/app_paths/).
 
 **1. Set the values.** `configure_file` replaces `@NAME@` with the value of the
 CMake variable `NAME` visible where it is called. So the function sets plain
 variables:
 
 ```cmake
-string(MAKE_C_IDENTIFIER "${ARG_NAME}" PK_APP_NAMESPACE)   # usable as a C++ namespace
+string(MAKE_C_IDENTIFIER "${ARG_NAME}" PK_APP_NAMESPACE)   # a C++ namespace
 set(PK_APP_NAME    "${ARG_NAME}")
 set(PK_APP_VERSION "${PROJECT_VERSION}")
 file(RELATIVE_PATH PK_APP_BIN_TO_ROOT                       # ".."
@@ -169,7 +171,8 @@ constexpr const char* bin_to_root = "@PK_APP_BIN_TO_ROOT@";
 ```
 
 ```cmake
-configure_file("${template_dir}/app_paths.cpp.in" "${out_dir}/app_paths.cpp" @ONLY)
+configure_file("${template_dir}/app_paths.cpp.in" "${out_dir}/app_paths.cpp"
+  @ONLY)
 ```
 
 writes
@@ -254,7 +257,8 @@ namespace myproject {
 
 inline constexpr const char* version     = "@PROJECT_VERSION@";
 inline constexpr const char* description = R"pk(@PROJECT_DESCRIPTION@)pk";
-inline constexpr const char* compiler    = "@CMAKE_CXX_COMPILER_ID@ @CMAKE_CXX_COMPILER_VERSION@";
+inline constexpr const char* compiler    = "@CMAKE_CXX_COMPILER_ID@ "
+                                           "@CMAKE_CXX_COMPILER_VERSION@";
 
 } // namespace myproject
 ```
