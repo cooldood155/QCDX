@@ -29,7 +29,7 @@ and/or fixes that directly impact users and is not logged in this document.
 
 ### Security -->
 
-## [Unreleased]
+## [0.3.0] - 2026-11-03
 
 ### Added
 
@@ -235,7 +235,8 @@ with a global `pk` command that creates projects and works inside them.
   `ci.yml`, then publishes the tested files to PyPI (trusted publishing) and
   GitHub Releases, with `SHA256SUMS` and provenance attestations.
 
-[Unreleased]: https://github.com/cooldood155/QCDX/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/cooldood155/QCDX/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/cooldood155/QCDX/releases/tag/v0.3.0
 [0.2.0]: https://github.com/cooldood155/QCDX/releases/tag/v0.2.0
 [0.1.1]: https://github.com/cooldood155/QCDX/releases/tag/v0.1.1
 [0.1.0]: https://github.com/cooldood155/QCDX/releases/tag/v0.1.0
