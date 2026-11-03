@@ -266,9 +266,9 @@ my-project/
 | [`RELEASE.md`](cmake/projectkit/docs/RELEASE.md) | tagged releases: targets, archives, checks, signing |
 | [`PACKAGE.md`](cmake/projectkit/docs/PACKAGE.md) | Conan packaging, editable mode and uploads |
 | [`ANALYSER_LAUNCHER.md`](cmake/projectkit/docs/ANALYSER_LAUNCHER.md) | clang-tidy and cppcheck integration |
-| [`PLATFORMS.md`]() | ... |
-| [`REQUIREMENTS.md`]() | ... |
-| `GENERATED_FILES.md` (Coming Soon) | `app_paths`, the export header, and generating your own files |
+| [`PLATFORMS.md`](docs/PLATFORMS.md) | Every single the compiled code of a QCDX (`pk new`) project can be built for and run on |
+| [`REQUIREMENTS.md`](docs/REQUIREMENTS.md) | External tools needed to develop a QCDX (`pk new`) project |
+| [`GENERATED_FILES.md`](docs/GENERATED_FILES.md) | `app_paths`, the export header, and generating your own files |
 
 ## License
 

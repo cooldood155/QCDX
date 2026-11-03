@@ -1,6 +1,6 @@
 # Development Requirements
 
-*External tools needed to develope a QCDX (`pk new`) project, along with their
+*External tools needed to develop a QCDX (`pk new`) project, along with their
 oldest and newest supported versions.*
 
 Every single number in this document comes from a file in *this* repository
