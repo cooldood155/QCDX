@@ -22,6 +22,7 @@ def files_mentioning(root, word):
     return hits
 
 
+# pk new creates every file, renames everything and fills in the options
 def test_new_project_is_renamed_and_complete(pk, tmp_path):
     code, out = pk("new", "rocket", "--no-git", "--description=Rocket sim", "--license=MIT",
                    "--author=Ada <ada@example.com>", "--url=https://example.com/rocket")
@@ -49,6 +50,7 @@ def test_new_project_is_renamed_and_complete(pk, tmp_path):
     assert "url=https://github.com/cooldood155/QCDX.git" in state
 
 
+# The new project's kit is an exact copy of the source kit
 def test_new_kit_is_identical_to_the_source_kit(pk, tmp_path):
     assert pk("new", "probe", "--no-git")[0] == 0
     project = tmp_path / "probe"
@@ -58,11 +60,13 @@ def test_new_kit_is_identical_to_the_source_kit(pk, tmp_path):
             assert copy.read_bytes() == source.read_bytes(), str(copy)
 
 
+# The description defaults to the project name
 def test_new_default_description_is_the_name(pk, tmp_path):
     assert pk("new", "probe", "--no-git")[0] == 0
     assert 'DESCRIPTION "probe"' in (tmp_path / "probe/CMakeLists.txt").read_text()
 
 
+# The recipe gets the git user as author and none of the template's identity
 def test_new_keeps_nothing_of_the_template_recipe_identity(pk, tmp_path):
     assert pk("new", "probe", "--no-git")[0] == 0
     recipe = (tmp_path / "probe/conanfile.py").read_text()
@@ -71,6 +75,7 @@ def test_new_keeps_nothing_of_the_template_recipe_identity(pk, tmp_path):
     assert "Reumann" not in recipe
 
 
+# pk new makes the first commit
 @requires_git
 def test_new_makes_a_first_commit(pk, tmp_path):
     code, out = pk("new", "probe")
@@ -79,6 +84,7 @@ def test_new_makes_a_first_commit(pk, tmp_path):
     assert log.stdout.strip() == f"Create probe with QCDX {__version__}"
 
 
+# pk new refuses bad names, and non-empty folders unless --force
 def test_new_refuses_bad_names_and_full_directories(pk, tmp_path):
     assert pk("new", "My-Project", "--no-git")[0] == 1
     (tmp_path / "taken").mkdir()
@@ -87,6 +93,7 @@ def test_new_refuses_bad_names_and_full_directories(pk, tmp_path):
     assert pk("new", "probe", "taken", "--no-git", "--force")[0] == 0
 
 
+# --description and --version still apply when the name is qcdx
 def test_new_with_the_template_name_still_applies_description_and_version(pk, tmp_path):
     code, out = pk("new", "qcdx", "--no-git", "--description=Template project built on ProjectKit",
                    "--version=0.3.0")
@@ -98,6 +105,7 @@ def test_new_with_the_template_name_still_applies_description_and_version(pk, tm
     assert (tmp_path / "qcdx/include/qcdx/core.hpp").is_file()
 
 
+# The scripts stay executable (skipped on Windows)
 def test_new_keeps_scripts_executable(pk, tmp_path):
     import os
 

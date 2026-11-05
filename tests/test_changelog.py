@@ -22,12 +22,14 @@ def version_key(name):
     return tuple(int(part) for part in name.split("."))
 
 
+# Current VERSION has a dated section in CHANGELOG.md
 def test_version_has_a_dated_section():
     dates = dict(SECTIONS)
     assert VERSION in dates, f"no '## [{VERSION}] - YYYY-MM-DD' section"
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", dates[VERSION]), VERSION
 
 
+# Each section appears once, Unreleased comes first and releases go newest to oldest
 def test_sections_are_unique_and_newest_first():
     names = [name for name, _ in SECTIONS]
     assert len(names) == len(set(names)), names
@@ -38,12 +40,14 @@ def test_sections_are_unique_and_newest_first():
     assert RELEASES == sorted(RELEASES, key=version_key, reverse=True)
 
 
+# Every release has its tag link and Unreleased compares against the current version
 def test_every_section_has_its_link():
     for name in RELEASES:
         assert LINKS.get(name) == f"{REPO}/releases/tag/v{name}", name
     assert LINKS.get("Unreleased") == f"{REPO}/compare/v{VERSION}...HEAD"
 
 
+# Every release section lists at least one change
 def test_releases_list_changes():
     parts = re.split(r"^## \[([^\]]+)\].*$", TEXT, flags=re.MULTILINE)
     for name, body in zip(parts[1::2], parts[2::2]):

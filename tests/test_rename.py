@@ -12,6 +12,7 @@ def snapshot(project):
     return {str(p.relative_to(project)): p.read_bytes() for p in project.rglob("*") if p.is_file()}
 
 
+# bootstrap.py renames the files, targets, recipe and tests
 def test_rename_changes_project_name_only(pk, tmp_path):
     assert pk("new", "rocket", "--no-git")[0] == 0
     project = tmp_path / "rocket"
@@ -29,6 +30,8 @@ def test_rename_changes_project_name_only(pk, tmp_path):
     assert "no occurrences of rocket remain" in out
 
 
+# Renaming leaves longer words that contain the old name alone
+# (e.g., renaming from "cod" to fish leaves "codegen" alone)
 def test_rename_ignores_longer_words(pk, tmp_path):
     assert pk("new", "cod", "--no-git")[0] == 0
     project = tmp_path / "cod"
@@ -38,6 +41,7 @@ def test_rename_ignores_longer_words(pk, tmp_path):
     assert "codegen" in (project / "tools/CMakeLists.txt").read_text()
 
 
+# Renaming away from a kit word (like "core") is refused and changes nothing
 def test_rename_refuses_a_word_of_the_kit_and_changes_nothing(pk, tmp_path):
     assert pk("new", "rocket", "--no-git")[0] == 0
     project = tmp_path / "rocket"
@@ -51,6 +55,7 @@ def test_rename_refuses_a_word_of_the_kit_and_changes_nothing(pk, tmp_path):
     assert snapshot(project) == before
 
 
+# Renaming to a reserved name is refused and changes nothing
 def test_rename_checks_new_name(pk, tmp_path):
     assert pk("new", "rocket", "--no-git")[0] == 0
     project = tmp_path / "rocket"
@@ -60,6 +65,7 @@ def test_rename_checks_new_name(pk, tmp_path):
     assert snapshot(project) == before
 
 
+# Renaming to a name containing the old one works (rocket to rocket_v2)
 def test_rename_to_a_name_containing_the_old_one(pk, tmp_path):
     assert pk("new", "rocket", "--no-git")[0] == 0
     project = tmp_path / "rocket"

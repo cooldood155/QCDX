@@ -86,6 +86,7 @@ def probe(build):
     return dict(line.split("=", 1) for line in lines)
 
 
+# Tools given the same export file all end up in it
 def test_tools_share_export_files(build):
     host_tools = read(build / "kitprobeHostToolsConfig.cmake")
     assert "add_executable(kitprobe::gen IMPORTED)" in host_tools
@@ -99,6 +100,7 @@ def test_tools_share_export_files(build):
     assert "add_executable(solo IMPORTED)" in solo
 
 
+# Windows-only app options (.rc file, static runtime, own manifest) are only used on Windows
 def test_app_windows_options(probe):
     windows = probe["WIN32"] not in ("", "0")
     mingw = probe["MINGW"] not in ("", "0")
@@ -116,12 +118,14 @@ def test_app_windows_options(probe):
     assert probe["plain_app.LINK_OPTIONS"] == "value-NOTFOUND"
 
 
+# C files get generated, except for NO_APP_PATHS apps
 def test_app_paths(build):
     assert (build / "generated" / "demo" / "app_paths.h").is_file()
     assert (build / "generated" / "demo" / "app_paths.c").is_file()
     assert not (build / "generated" / "plain").exists()
 
 
+# A missing RC_FILE stops the configuration with a CLEAR error
 def test_app_rc_file_must_exist(build, tmp_path):
     body = "pk_create_app(NAME demo SOURCE_DIR apps/demo RC_FILE x.rc)\n"
     code, out = configure(tmp_path, body, {"apps/demo/main.c": MAIN})

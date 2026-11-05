@@ -8,11 +8,13 @@ def registry(tmp_path):
     return json.loads((tmp_path / "pk-home" / "projects.json").read_text(encoding="utf-8"))["projects"]
 
 
+# pk list says there are no projects yet
 def test_list_without_projects(pk):
     code, out = pk("list")
     assert code == 0 and "no projects yet" in out
 
 
+# pk new adds the project to pk list
 def test_new_remembers_the_project(pk, tmp_path):
     assert pk("new", "rocket", "--no-git")[0] == 0
     code, out = pk("list")
@@ -20,6 +22,7 @@ def test_new_remembers_the_project(pk, tmp_path):
     assert "rocket" in out and __version__ in out and str(tmp_path / "rocket") in out
 
 
+# Running pk inside a project adds it to the registry
 def test_a_command_inside_a_project_remembers_it(pk, tmp_path):
     assert pk("new", "probe", "--no-git")[0] == 0
     (tmp_path / "pk-home" / "projects.json").unlink()
@@ -27,6 +30,7 @@ def test_a_command_inside_a_project_remembers_it(pk, tmp_path):
     assert [entry["path"] for entry in registry(tmp_path)] == [str((tmp_path / "probe").resolve())]
 
 
+# A project is only registered once
 def test_a_project_is_remembered_once(pk, tmp_path):
     assert pk("new", "probe", "--no-git")[0] == 0
     assert pk("help", cwd=tmp_path / "probe")[0] == 0
@@ -34,12 +38,14 @@ def test_a_project_is_remembered_once(pk, tmp_path):
     assert len(registry(tmp_path)) == 1
 
 
+# pk list inside a project runs the project's own list
 def test_list_inside_a_project_is_the_projects_own(pk, tmp_path):
     assert pk("new", "probe", "--no-git")[0] == 0
     code, out = pk("list", cwd=tmp_path / "probe")
     assert code == 0 and "build types" in out
 
 
+# Deleted projects show as missing and --prune "forgets" them (removes them from the index)
 def test_missing_projects_are_shown_and_pruned(pk, tmp_path):
     assert pk("new", "kept", "--no-git")[0] == 0
     assert pk("new", "gone", "--no-git")[0] == 0
@@ -51,6 +57,7 @@ def test_missing_projects_are_shown_and_pruned(pk, tmp_path):
     assert [entry["path"] for entry in registry(tmp_path)] == [str((tmp_path / "kept").resolve())]
 
 
+# A broken projects.json is reported and NOT overwritten
 def test_a_broken_registry_is_reported_and_left_alone(pk, tmp_path):
     home = tmp_path / "pk-home"
     home.mkdir()
@@ -61,5 +68,6 @@ def test_a_broken_registry_is_reported_and_left_alone(pk, tmp_path):
     assert (home / "projects.json").read_text(encoding="utf-8") == "not json"
 
 
+# pk list rejects unknown arguments
 def test_list_rejects_unknown_arguments(pk):
     assert pk("list", "--bogus")[0] == 2

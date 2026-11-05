@@ -16,6 +16,7 @@ MINIMAL_MOVES = {"cmake/projectkit": ".pk/projectkit", "cmake": ".pk/cmake", "sc
                  "scripts/helpers": ".pk/settings", "profiles": ".pk/profiles", "cmake/toolchains": ".pk/toolchains"}
 
 
+# The default tree in Layout.cmake matches the one in tree.py
 def test_cmake_and_python_defaults_agree():
     text = (ROOT / "cmake/projectkit/Layout.cmake").read_text(encoding="utf-8")
     block = re.search(r"set\(PK_TREE_DEFAULTS(.*?)\)", text, re.DOTALL).group(1)
@@ -24,11 +25,13 @@ def test_cmake_and_python_defaults_agree():
     assert cmake == python
 
 
+# The classic preset is the default tree
 def test_classic_preset_is_the_default_tree():
     assert T.resolve("classic") == T.Tree()
     assert T.resolve("classic").is_classic()
 
 
+# Checks what the minimal preset moves and leaves out
 def test_minimal_preset():
     tree = T.resolve("minimal")
     assert tree.moved() == {"kit": ".pk/projectkit", "scripts": ".pk/scripts", "helpers": ".pk/settings",
@@ -36,6 +39,7 @@ def test_minimal_preset():
     assert tree.omit == {"tools", "clangd", "pre-commit"}
 
 
+# The same tree written as a conf or a drawing both read back the same
 @pytest.mark.parametrize("name", ["classic", "minimal"])
 def test_conf_and_drawing_round_trip(name):
     tree = T.resolve(name)
@@ -46,6 +50,7 @@ def test_conf_and_drawing_round_trip(name):
     assert drawing.isascii()
 
 
+# Drawings with box characters and blank spacer lines still parse
 def test_drawing_accepts_box_characters_and_spacers():
     drawing = T.resolve("minimal").draw("demo")
     fancy = (drawing.replace("|-- ", "\u251c\u2500\u2500 ").replace("`-- ", "\u2514\u2500\u2500 ")
@@ -54,17 +59,20 @@ def test_drawing_accepts_box_characters_and_spacers():
     assert T.parse(fancy, "fancy") == T.resolve("minimal")
 
 
+# Moving a part's line in a drawing moves that part
 def test_drawing_moves_a_part_by_its_line():
     drawing = T.Tree().draw("demo").replace("|-- profiles/                            <profiles>\n", "")
     drawing = drawing.replace("|-- scripts/", "|-- conan/\n|   `-- profiles/  <profiles>\n|-- scripts/")
     assert T.parse(drawing, "d").moved() == {"profiles": "conan/profiles"}
 
 
+# Deleting an optional part's line leaves it out
 def test_deleting_an_optional_line_leaves_it_out():
     drawing = T.Tree().draw("demo").replace("|-- tools/                               <tools> optional\n", "")
     assert T.parse(drawing, "d").omit == {"tools"}
 
 
+# Broken drawings give an error saying what is wrong
 @pytest.mark.parametrize("edit, message", [
     (lambda d: d.replace("<kit>", "<kitt>"), "<kitt> is not a part"),
     (lambda d: d.replace("<sources>", ""), "<sources> is missing"),
@@ -78,6 +86,7 @@ def test_broken_drawings_say_where(edit, message):
     assert message in str(error.value)
 
 
+# tree.conf accepts its other spellings (PK_TREE_, export, quotes, comments)
 def test_conf_spellings():
     tree = T.parse_conf("PK_TREE_PROFILES=.pk/profiles\nexport scripts = 'tools/scripts'  # here\n"
                         "omit = .clangd, tools/\n")
@@ -86,6 +95,7 @@ def test_conf_spellings():
     assert tree.omit == {"clangd", "tools"}
 
 
+# Wach kind of bad tree.conf is refused with the right reason
 @pytest.mark.parametrize("conf, message", [
     ("profile = x", "'profile' is not a part"),
     ("profiles = ../x", "not a relative path"),
@@ -104,6 +114,7 @@ def test_bad_confs(conf, message):
     assert message in str(error.value)
 
 
+# Trees in PK_HOME/trees can be used by name
 def test_user_trees(tmp_path, monkeypatch):
     monkeypatch.setenv("PK_HOME", str(tmp_path))
     (tmp_path / "trees").mkdir()
@@ -114,6 +125,7 @@ def test_user_trees(tmp_path, monkeypatch):
         T.resolve("nope")
 
 
+# pk sync copies kit files to where the tree puts them
 def test_sync_map_follows_the_tree():
     tree = T.resolve("minimal")
     pairs = dict(T.sync_map(tree))
@@ -124,6 +136,7 @@ def test_sync_map_follows_the_tree():
     assert T.PK_SETUP not in dict(T.sync_map(no_ci))
 
 
+# Paths are rewritten for the minimal tree and look-alikes are left alone
 @pytest.mark.parametrize("before, after", [
     ('"${CMAKE_CURRENT_LIST_DIR}/cmake/projectkit"', '"${CMAKE_CURRENT_LIST_DIR}/.pk/projectkit"'),
     ('"${CMAKE_CURRENT_LIST_DIR}/cmake")', '"${CMAKE_CURRENT_LIST_DIR}/.pk/cmake")'),
@@ -143,12 +156,14 @@ def test_rewrite_references(before, after):
     assert treecmd.rewrite_references(before, MINIMAL_MOVES) == after
 
 
+# Rewritten paths inside regexes get escaped
 def test_rewrite_references_escapes_regexes():
     before = r"exclude: ^(cmake/projectkit/|scripts/(pk|verify)\.py$)"
     assert treecmd.rewrite_references(before, MINIMAL_MOVES, escape=True) == \
         r"exclude: ^(\.pk/projectkit/|\.pk/scripts/(pk|verify)\.py$)"
 
 
+# A profile's toolchain path is recomputed when profiles or toolchains move
 def test_profile_toolchain_path_is_recomputed():
     line = 'user_toolchain=["{{ os.path.join(profile_dir, "..", "cmake", "toolchains", "x.cmake") }}"]'
     tree = T.Tree({"profiles": "conan/profiles", "toolchains": ".pk/toolchains"})

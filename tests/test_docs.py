@@ -23,6 +23,7 @@ def name(doc):
     return doc.relative_to(ROOT).as_posix()
 
 
+# Every file a Markdown doc links to or names exists
 @pytest.mark.parametrize("doc", DOCS + PROJECT_DOCS, ids=name)
 def test_doc_references_exist(doc):
     text = doc.read_text(encoding="utf-8")

@@ -4,6 +4,7 @@ import subprocess
 from conftest import requires_git
 
 
+# Checks the messages for a missing name and for --tree written without =
 def test_pk_new_explains_a_missing_name_and_a_spaced_value(pk):
     code, out = pk("new")
     assert code == 2 and out.startswith("pk new: missing NAME")
@@ -11,6 +12,7 @@ def test_pk_new_explains_a_missing_name_and_a_spaced_value(pk):
     assert code == 2 and "--tree needs a value, written --tree=VALUE" in out
 
 
+# pk new says when the first commit fails and leaves the files staged
 @requires_git
 def test_pk_new_says_when_the_first_commit_fails(pk, tmp_path):
     (tmp_path / "gitconfig").write_text("[user]\n\tname = Test User\n\temail = test@example.com\n"

@@ -33,6 +33,7 @@ def files(root):
     return found
 
 
+# pk new --tree=minimal makes the right tree and points everything at it
 def test_new_minimal_tree(pk, tmp_path):
     code, out = pk("new", "probe", "--no-git", "--tree=minimal")
     assert code == 0, out
@@ -60,6 +61,7 @@ def test_new_minimal_tree(pk, tmp_path):
     assert f"kit {version} in" in out, out
 
 
+# --omit alone leaves the parts out and keeps the classic paths
 def test_new_with_only_omissions_keeps_classic_paths(pk, tmp_path):
     code, out = pk("new", "probe", "--no-git", "--omit=tools,clangd")
     assert code == 0, out
@@ -70,6 +72,7 @@ def test_new_with_only_omissions_keeps_classic_paths(pk, tmp_path):
     assert "add_subdirectory(tools)" not in (project / "CMakeLists.txt").read_text()
 
 
+# pk new refuses a broken tree before creating any files
 def test_new_refuses_a_broken_tree_before_creating_anything(pk, tmp_path):
     (tmp_path / "bad.tree").write_text("demo/\n|-- src/  <sources>\n")
     code, out = pk("new", "probe", "--tree=bad.tree")
@@ -80,6 +83,7 @@ def test_new_refuses_a_broken_tree_before_creating_anything(pk, tmp_path):
     assert not (tmp_path / "probe").exists()
 
 
+# pk new works with a user tree and with a drawing file
 def test_new_from_a_user_tree_and_a_drawing(pk, tmp_path):
     trees = tmp_path / "pk-home" / "trees"
     trees.mkdir(parents=True)
@@ -98,11 +102,13 @@ def test_new_from_a_user_tree_and_a_drawing(pk, tmp_path):
     assert "add_subdirectory(code/src)" in (tmp_path / "two/CMakeLists.txt").read_text()
 
 
+# pk tree lists the available trees
 def test_global_tree_lists_the_trees(pk):
     code, out = pk("tree")
     assert code == 0 and "classic" in out and "minimal" in out
 
 
+# pk tree apply gives the same files as pk new with that tree
 @requires_git
 def test_apply_is_the_same_as_new(pk, tmp_path):
     assert pk("new", "probe")[0] == 0
@@ -118,6 +124,7 @@ def test_apply_is_the_same_as_new(pk, tmp_path):
     assert differ == [], differ
 
 
+# Going minimal and back to classic only loses the omitted parts
 @requires_git
 def test_apply_round_trip(pk, tmp_path):
     assert pk("new", "probe")[0] == 0
@@ -136,6 +143,7 @@ def test_apply_round_trip(pk, tmp_path):
     assert changed == [".pk/tree.conf", "CMakeLists.txt", "README.md", "conanfile.py"], changed
 
 
+# A broken tree changes nothing and pk tree reset fixes it
 @requires_git
 def test_a_broken_tree_changes_nothing_and_reset_brings_it_back(pk, tmp_path):
     assert pk("new", "probe", "--tree=minimal")[0] == 0
@@ -162,6 +170,7 @@ def test_a_broken_tree_changes_nothing_and_reset_brings_it_back(pk, tmp_path):
     assert project_pk(project, "tree", "check", scripts=".pk/scripts", env_dir=tmp_path)[0] == 0
 
 
+# pk sync updates a kit that lives in .pk/
 @requires_git
 def test_sync_follows_the_tree(pk, tmp_path):
     """QCDX keeps the classic tree; a kit that lives in .pk/ still syncs."""
