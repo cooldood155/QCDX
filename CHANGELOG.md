@@ -33,6 +33,16 @@ and/or fixes that directly impact users and is not logged in this document.
 
 ## [Unreleased]
 
+### Changed
+
+- `bootstrap.py` (`pk rename`): renaming a project to a word the kit uses (like
+  `core`) is now a warning instead of a note, and nothing changes until the
+  full word `yes` is typed (case-insensitive). The warning says that renaming
+  away from that word later will be refused. `--yes` alone no longer goes
+  ahead: scripts and CI need `--allow-ambiguous`, and without a terminal the
+  rename stops and prints why. `--dry-run` shows the warning and what would
+  change, without asking.
+
 ## [0.3.0] - 2026-11-03
 
 ### Added

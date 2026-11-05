@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import re
+from sys import stdin
 from typing import Iterator, List, Optional, Set
 
 from . import tree as pktree
@@ -221,6 +222,7 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
     kit = os.path.join(*kit_path.split("/"))
 
     uses = kit_uses(old_name, kit)
+    # Trying to rename a project using the same name as a kit word:
     if uses and not allow_ambiguous:
         err(f"{C.red}error{C.reset}  the kit uses '{old_name}' as its own word:")
         for line in uses[:5]:
@@ -229,13 +231,25 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
             "tell them apart. Nothing changed: rename by hand, or pass --allow-ambiguous and check\n"
             "'git diff' before committing.")
         return 1
-    if kit_uses(new_name, kit):
-        out(f"{C.yellow}note{C.reset}  the kit uses '{new_name}' as its own word, renaming away from it later "
-            f"needs --allow-ambiguous")
+    # Naming project a kit word:
+    to_kit_word = bool(kit_uses(new_name, kit))
+    if to_kit_word:
+        out(f"{C.yellow}warning{C.reset}  the kit uses '{new_name}' internally as its own word.\n"
+            f"Renaming to '{new_name}' works, but renaming away from it later will be refused, because the\n"
+            f"rename can't tell the project name apart from the kit's word. Passing --allow-ambiguous\n"
+            f"renames away from it anyway, but check 'git diff' afterwards for unexpected changes.")
+
+        if not stdin.isatty() and not allow_ambiguous and not dry_run:
+            die("not asking on a non-interactive input: pass --allow-ambiguous to bypass")
 
     in_git = capture(["git", "rev-parse", "--git-dir"])[0] == 0
     if not force and not dry_run and in_git and capture(["git", "status", "--porcelain"])[1].strip():
         die("the git tree is dirty; commit first so this is revertible, or pass --force")
+
+    if to_kit_word and not assume_yes and not dry_run:
+        if not confirm(f"Type the full word 'yes' to rename to {new_name} anyways:", ("yes",)):
+            note("nothing changed.")
+            return 1
 
     def paths_to_rename() -> List[str]:
         found = []
@@ -269,7 +283,11 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
     if dry_run:
         note("dry run, nothing changed")
         return 0
-    if not assume_yes and not confirm(f"rename {old_name} to {new_name}?"):
+    if to_kit_word and not allow_ambiguous and assume_yes:
+        err(f"{C.red}error{C.reset}  --yes doesn't cover renaming to a kit word: run without --yes and\n"
+            "type yes when asked, or pass --allow-ambiguous. Nothing changed.")
+        return 1
+    elif not assume_yes and not confirm(f"rename {old_name} to {new_name}?"):
         note("nothing changed")
         return 0
 

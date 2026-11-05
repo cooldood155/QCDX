@@ -41,13 +41,37 @@ def test_rename_ignores_longer_words(pk, tmp_path):
     assert "codegen" in (project / "tools/CMakeLists.txt").read_text()
 
 
-# Renaming away from a kit word (like "core") is refused and changes nothing
+# Renaming to a kit word (like "core") with only --yes is refused and changes nothing,
+# because --yes can't stand in for typing the full word "yes"
+def test_rename_to_a_kit_word_with_only_yes_is_refused(pk, tmp_path):
+    assert pk("new", "rocket", "--no-git")[0] == 0
+    project = tmp_path / "rocket"
+    before = snapshot(project)
+    code, out = rename(project, "core")
+    assert code == 1, out
+    assert "renaming away from it later will be refused," in out
+    assert "Renaming to 'core' works, but" in out
+    assert snapshot(project) == before
+
+# A dry run to a kit word shows the warning and changes nothing
+def test_rename_to_a_kit_word_dry_run(pk, tmp_path):
+    assert pk("new", "rocket", "--no-git")[0] == 0
+    project = tmp_path / "rocket"
+    before = snapshot(project)
+    code, out = rename(project, "core", "--dry-run")
+    assert code == 0, out
+    assert "renaming away from it later will be refused," in out
+    assert snapshot(project) == before
+
+
+# Renaming to a kit word (like "core") works with --allow-ambiguous and shows the warning,
+# and renaming away from it afterwards is refused and changes nothing
 def test_rename_refuses_a_word_of_the_kit_and_changes_nothing(pk, tmp_path):
     assert pk("new", "rocket", "--no-git")[0] == 0
     project = tmp_path / "rocket"
-    code, out = rename(project, "core")
+    code, out = rename(project, "core", "--allow-ambiguous")
     assert code == 0, out
-    assert "renaming away from it later" in out
+    assert "renaming away from it later will be refused," in out
     before = snapshot(project)
     code, out = rename(project, "core_classic")
     assert code == 1, out
