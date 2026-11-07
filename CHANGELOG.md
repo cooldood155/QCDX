@@ -50,9 +50,9 @@ and/or fixes that directly impact users and is not logged in this document.
 - `release.py stage`: runs `pk.py` from wherever the project's tree keeps the
   scripts (e.g., `.pk/scripts/pk.py`), not always `scripts/pk.py`. Projects
   with a moved tree couldn't build or test a single release target.
-- `pk-setup` (Windows): Conan builds with the runner's MSYS2 bash and the
-  environment's own compiler (`tools.microsoft.bash:path`,
-  `tools.build:compiler_executables`). Autotools recipes (libjpeg, xz_utils,
+- `pk-setup` (Windows): Conan builds with the runner's MSYS2 bash (now with
+  `base-devel`: make, diffutils, autotools, etc.) and the environment's own
+  compiler (`tools.microsoft.bash:path`, `tools.build:compiler_executables`). Autotools recipes (libjpeg, xz_utils,
   etc.) were built by the MSYS2 Conan installs itself, whose gcc targets
   `msys-2.0.dll` (undefined reference to `__getreent` when linking). Windows
   Conan caches start over (`conan-w2-` keys) to drop the broken packages.

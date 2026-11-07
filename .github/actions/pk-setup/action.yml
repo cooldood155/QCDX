@@ -140,7 +140,9 @@ runs:
       with:
         msystem: ${{ inputs.msystem }}
         update: true
-        install: git
+        # base-devel: make, diffutils, autotools, etc. for Conan's autotools
+        # recipes (NO gcc, the compiler comes from pacboy's toolchain)
+        install: git base-devel
         pacboy: >-
           toolchain:p
           cmake:p
@@ -254,9 +256,10 @@ runs:
       shell: msys2 {0}
       run: conan profile detect --force
 
-    # Autotools recipes (libjpeg, xz_utils, etc.) run in THIS MSYS2's bash with
-    # this environment's compiler. Otherwise Conan installs its own MSYS2, whose
-    # gcc builds for msys-2.0.dll (undefined reference to '__getreent').
+    # Autotools recipes (libjpeg, xz_utils, etc.) run in THIS MSYS2's bash (with
+    # base-devel) and this environment's compiler. Otherwise Conan installs its
+    # own MSYS2, whose gcc builds for msys-2.0.dll (undefined reference to
+    # '__getreent').
     - name: Point Conan at this MSYS2
       if: runner.os == 'Windows'
       shell: msys2 {0}
