@@ -310,10 +310,10 @@ class Release:
 
     # stage -------------------------------------------------------------------
 
+    # Wherever project's tree keeps scripts (.pk/scripts, etc.)
     def pk(self, *args: str, env: Optional[Dict[str, str]] = None) -> None:
-        if run([sys.executable,
-                os.path.join(self.root, "scripts", "pk.py"), *args],
-               cwd=self.root, env=env) != 0:
+        pk_py = pktree.load_or_exit(self.root).path(self.root, "scripts", "pk.py")
+        if run([sys.executable, pk_py, *args], cwd=self.root, env=env) != 0:
             fail(f"pk {' '.join(args)} failed")
 
     def build_tree(self, target: str, build_type: str) -> str:
