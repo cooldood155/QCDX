@@ -31,7 +31,7 @@ and/or fixes that directly impact users and is not logged in this document.
 
 ### Security -->
 
-## [Unreleased]
+## [0.3.1]
 
 ### Changed
 
@@ -42,6 +42,18 @@ and/or fixes that directly impact users and is not logged in this document.
   ahead: scripts and CI need `--allow-ambiguous`, and without a terminal the
   rename stops and prints why. `--dry-run` shows the warning and what would
   change, without asking.
+
+### Fixed
+
+- `release.py stage`: runs `pk.py` from wherever the project's tree keeps the
+  scripts (e.g., `.pk/scripts/pk.py`), not always `scripts/pk.py`. Projects
+  with a moved tree couldn't build or test a single release target.
+- `pk-setup` (Windows): Conan builds with the runner's MSYS2 bash and the
+  environment's own compiler (`tools.microsoft.bash:path`,
+  `tools.build:compiler_executables`). Autotools recipes (libjpeg, xz_utils,
+  etc.) were built by the MSYS2 Conan installs itself, whose gcc targets
+  `msys-2.0.dll` (undefined reference to `__getreent` when linking). Windows
+  Conan caches start over (`conan-w2-` keys) to drop the broken packages.
 
 ## [0.3.0] - 2026-11-03
 
@@ -260,7 +272,8 @@ with a global `pk` command that creates projects and works inside them.
   `ci.yml`, then publishes the tested files to PyPI (trusted publishing) and
   GitHub Releases, with `SHA256SUMS` and provenance attestations.
 
-[Unreleased]: https://github.com/cooldood155/QCDX/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/cooldood155/QCDX/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/cooldood155/QCDX/releases/tag/v0.3.1
 [0.3.0]: https://github.com/cooldood155/QCDX/releases/tag/v0.3.0
 [0.2.0]: https://github.com/cooldood155/QCDX/releases/tag/v0.2.0
 [0.1.0]: https://github.com/cooldood155/QCDX/releases/tag/v0.1.0

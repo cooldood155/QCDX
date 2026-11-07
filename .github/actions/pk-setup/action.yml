@@ -184,13 +184,18 @@ runs:
         fi
         echo "profiles=$profiles" >> "$GITHUB_OUTPUT"
 
+    # Windows keys start over at 'conan-w2': caches before it have packages
+    # built by the wrong MSYS2 gcc (see "Point Conan at this MSYS2").
     - name: Conan cache key
       id: conan-key
       shell: bash
       env:
+        PREFIX: ${{ runner.os == 'Windows' && 'conan-w2' || 'conan' }}
         TARGET: ${{ inputs.target }}
         HASH: ${{ hashFiles('conanfile.py', 'deps.json', 'conan.lock', format('{0}/**', steps.tree.outputs.profiles)) }}
-      run: echo "key=conan-$TARGET-$HASH" >> "$GITHUB_OUTPUT"
+      run: |
+        echo "key=$PREFIX-$TARGET-$HASH" >> "$GITHUB_OUTPUT"
+        echo "prefix=$PREFIX-$TARGET-" >> "$GITHUB_OUTPUT"
 
     # The key is shared with verify.yml, and caches saved on main can be read
     # from every branch and tag: release runs will reuse verify's packages,
@@ -207,7 +212,7 @@ runs:
         key: ${{ steps.conan-key.outputs.key }}
         restore-keys: |
           ${{ steps.conan-key.outputs.key }}
-          conan-${{ inputs.target }}-
+          ${{ steps.conan-key.outputs.prefix }}
 
     - if: inputs.cache == 'restore' || inputs.cache == 'manual'
       id: conan-restore
@@ -217,7 +222,7 @@ runs:
         key: ${{ steps.conan-key.outputs.key }}
         restore-keys: |
           ${{ steps.conan-key.outputs.key }}
-          conan-${{ inputs.target }}-
+          ${{ steps.conan-key.outputs.prefix }}
 
     # -------------------------------------------------------------------------
     # Compiler cache
@@ -248,3 +253,17 @@ runs:
       if: runner.os == 'Windows'
       shell: msys2 {0}
       run: conan profile detect --force
+
+    # Autotools recipes (libjpeg, xz_utils, etc.) run in THIS MSYS2's bash with
+    # this environment's compiler. Otherwise Conan installs its own MSYS2, whose
+    # gcc builds for msys-2.0.dll (undefined reference to '__getreent').
+    - name: Point Conan at this MSYS2
+      if: runner.os == 'Windows'
+      shell: msys2 {0}
+      run: |
+        printf '%s\n' \
+          'tools.microsoft.bash:subsystem=msys2' \
+          "tools.microsoft.bash:path=$(cygpath -m /usr/bin/bash.exe)" \
+          "tools.build:compiler_executables={\"c\": \"$(cygpath -m "$(command -v "$CC")")\", \"cpp\": \"$(cygpath -m "$(command -v "$CXX")")\"}" \
+          >> "$(conan config home)/global.conf"
+        cat "$(conan config home)/global.conf"
