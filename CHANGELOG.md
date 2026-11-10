@@ -33,6 +33,18 @@ and/or fixes that directly impact users and is not logged in this document.
 
 ## [Unreleased]
 
+### Fixed
+
+- `pk dep rm` and `pk dep lock --clean`: pruning `conan.lock` only looked at
+  one profile (`native` by default). This caused every package not for the
+  platform running the command to be dropped (gtk, glib, wayland, etc. for
+  Linux, dropped wehn `pd dep rm` ran from a Windows machine). The lock then
+  failed on those platforms. Pruning now checks every profile in `profiles/`,
+  keeps an entry if any of them uses it, and drops nothing if one of their
+  graphs can't be read. With more than one `--profile`, `pk dep lock --clean`
+  also re-resolved the other profiles' packages to their newest versions; their
+  pins stay now.
+
 ## [0.3.1] - 2026-11-09
 
 ### Changed

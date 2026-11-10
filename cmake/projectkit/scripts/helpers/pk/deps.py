@@ -277,7 +277,23 @@ class Repo:
         """Conan command run for its output, even under --dry-run."""
         return self._exec(args, True, check, quiet)
 
-    def lock_create(self, update=False, clean=False):
+    def all_profiles(self):
+        """native first, then the profiles under profiles/ and any --profile
+        recieved. conan.lock covers all of them."""
+        folder = os.path.join(self.root, pktree.load_or_exit(self.root).rel("profiles"))
+        found = []
+        if os.path.isdir(folder):
+            found = sorted(n for n in os.listdir(folder)
+                           if os.path.isfile(os.path.join(folder, n))
+                           and not n.startswith(".") and not n.endswith(".md"))
+
+        ordered = [self.native]
+        for name in found + self.profiles:
+            if name not in ordered:
+                ordered.append(name)
+        return ordered
+
+    def lock_create(self, update=False):
         """Create or extend conan.lock; already-locked packages keep their pins.
         One lock covers all profiles via their graph."""
         for index, profile in enumerate(self.profiles):
@@ -291,12 +307,51 @@ class Repo:
             args += ["--lockfile-out=conan.lock"]
             if update:
                 args.append("--update")
-
-            # Only the first pass cleans; one profile cleaning would drop
-            # entries that only another profile needs.
-            if clean and index == 0:
-                args.append("--lockfile-clean")
             self.run(args)
+
+    def lock_prune(self):
+        """Drop the conan.lock entries that no profile uses. All profiles count
+        (all_profiles()): Conan's --lockfile-clean only knows the profile it
+        was ran with, and drops what the others need. A profile whose graph
+        can't be read = nothing is dropped."""
+        lock = self.load_lock()
+        if not lock:
+            return
+
+        used = set()
+        for profile in self.all_profiles():
+            args = ["graph", "info", "."] + self.profile_args(profile)
+            args += ["-c", "tools.graph:skip_test=False", "--lockfile=conan.lock",
+                     "--lockfile-partial", "--format=json"]
+            info("reading the Conan graph ({})".format(profile))
+            proc = self.capture(args, check=False, quiet=True)
+            if proc.returncode != 0:
+                errors = [line for line in (proc.stderr or "").splitlines() if "ERROR" in line]
+                warn("can't read the Conan graph for profile '{}'{}; nothing is pruned "
+                     "from conan.lock".format(profile, ": " + errors[-1] if errors else ""))
+                return
+            for node in json.loads(proc.stdout)["graph"]["nodes"].values():
+                ref = node.get("ref") or ""
+                if LOCK_REF_RE.match(ref):
+                    used.add(_ref_label(ref))
+
+        dropped = []
+        for section in ("requires", "build_requires"):
+            kept = []
+            for ref in lock.get(section, []):
+                if _ref_label(ref) in used:
+                    kept.append(ref)
+                else:
+                    dropped.append(_ref_label(ref))
+            lock[section] = kept
+
+        if not dropped:
+            return
+        info("no profile uses {}".format(", ".join(dropped)))
+        if self.dry_run:
+            info("would drop them from conan.lock")
+            return
+        write_atomic(self.lock_path, json.dumps(lock, indent=4) + "\n")
 
     def lock_remove(self, names):
         if not os.path.isfile(self.lock_path) or not names:
@@ -1130,10 +1185,11 @@ def cmd_rm(repo, args):
         del manifest["packages"][name]
         repo.save_manifest(manifest)
         before = repo.locked_versions(revisions=True)
-        if os.path.isfile(repo.lock_path):
-            repo.lock_create(clean=True)
         if repo.dry_run:
+            info("would prune conan.lock (all profiles under profiles/)")
             return 0
+        if os.path.isfile(repo.lock_path):
+            repo.lock_prune()
         step("locked")
         _report_lock_changes(before, repo.locked_versions(revisions=True))
 
@@ -1178,7 +1234,10 @@ def cmd_lock(repo, args):
     with Transaction(repo):
         before = repo.locked_versions(revisions=True)
         step("lock ({})".format(", ".join(repo.profiles)))
-        repo.lock_create(clean=args.clean)
+        repo.lock_create()
+        if args.clean:
+            step("clean (profiles under profiles/)")
+            repo.lock_prune()
 
         if repo.dry_run:
             return 0
@@ -1489,7 +1548,8 @@ def build_parser():
     p.add_argument("names", nargs="*", help="packages to update (default: all)")
 
     p = sub.add_parser("lock", parents=[common])
-    p.add_argument("--clean", action="store_true", help="drop entries nothing needs")
+    p.add_argument("--clean", action="store_true",
+                   help="drop entries no profile under profiles/ uses")
 
     p = sub.add_parser("check", parents=[common])
     p.add_argument("--strict", action="store_true", help="unused packages are errors")

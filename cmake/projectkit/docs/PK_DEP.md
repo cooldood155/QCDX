@@ -185,6 +185,11 @@ and lists each `file:line`. After it's removed `conan.lock` is pruned, and
 transitive packages only it needed go with it. `--force` removes it anyway,
 but then the next configuration fails until those uses are gone.
 
+Pruning reads the graph of *every* profile in `profiles/` (plus any
+`--profile`), not just `native`: an entry stays if any of them uses it (gtk is
+only on Linux, for example). If one of the graphs can't be read, nothing is
+pruned and the profile is named.
+
 ### Versions
 
 ```bash
@@ -192,7 +197,7 @@ pk dep update sqlite3 # newest version in its range
 pk dep update         # everything, as a fresh lock
 pk dep lock           # add missing entries, keep every pin
 pk dep lock --profile x86_64-mingw-w64 --profile aarch64-linux-gnu
-pk dep lock --clean   # also drop entries nothing needs
+pk dep lock --clean   # also drop entries no profile in profiles/ uses
 ```
 
 Every change prints old and new versions with short recipe revisions; a
