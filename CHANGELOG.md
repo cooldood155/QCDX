@@ -33,7 +33,7 @@ and/or fixes that directly impact users and is not logged in this document.
 
 ## [Unreleased]
 
-## [0.3.1] - 2026-11-07
+## [0.3.1] - 2026-11-09
 
 ### Changed
 
