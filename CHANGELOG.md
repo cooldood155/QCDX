@@ -35,6 +35,10 @@ and/or fixes that directly impact users and is not logged in this document.
 
 ### Fixed
 
+- Cross builds failed to configure on Windows ("include could not find
+  requested file"). The cross profiles built the toolchain path with
+  backslashes, and Conan read `\t` and `\x86` in it as a tab and another
+  character. The path now uses forward slashes.
 - `pk dep rm` and `pk dep lock --clean`: pruning `conan.lock` only looked at
   one profile (`native` by default). This caused every package not for the
   platform running the command to be dropped (gtk, glib, wayland, etc. for

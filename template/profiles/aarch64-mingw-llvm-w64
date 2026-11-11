@@ -34,7 +34,10 @@ build_type=Release
 
 [conf]
 tools.cmake.cmaketoolchain:generator=Ninja
-tools.cmake.cmaketoolchain:user_toolchain=["{{ os.path.join(profile_dir, "..", "cmake", "toolchains", "aarch64-mingw-llvm-w64.cmake") }}"]
+# Forward slashes on purpose: Conan reads this as a quoted string, and the
+# backslashes os.path.join makes on Windows would turn "\t" and "\x86" into
+# other characters.
+tools.cmake.cmaketoolchain:user_toolchain=["{{ os.path.join(profile_dir, "..", "cmake", "toolchains", "aarch64-mingw-llvm-w64.cmake") | replace("\\", "/") }}"]
 tools.cmake.cmake_layout:build_folder_vars=["settings.os", "settings.arch", "settings.build_type"]
 
 tools.build:compiler_executables={"c": "aarch64-w64-mingw32-clang", "cpp": "aarch64-w64-mingw32-clang++"}
