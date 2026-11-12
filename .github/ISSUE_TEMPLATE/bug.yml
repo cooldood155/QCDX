@@ -1,0 +1,141 @@
+name: "Something's wrong"
+description: pk, the CMake kit, a script or CI did something it shouldn't (or didn't do something it should).
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for using QCDX! The more of this you fill in, the faster it gets fixed.
+        Don't put anything private in here (tokens, keys, internal URLs, etc.), everyone can see it.
+
+  - type: input
+    id: command
+    attributes:
+      label: What did you run?
+      description: The exact command (e.g., `pk build release --werror`). `pk -n ...` prints every Conan and CMake command pk would run, without running them.
+      placeholder: "pk build release"
+    validations:
+      required: true
+
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened?
+      description: Paste the output word for word, from the command down to the error.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should have happened?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: part
+    attributes:
+      label: Which part?
+      description: Pick "Not sure" if you don't know.
+      options:
+        - Not sure
+        - "pk new, pk list or pk tree (outside a project)"
+        - "pk inside a project (build, run, test, stage, status, clean, ...)"
+        - "Dependencies (pk dep, deps.json, conan.lock, DEPS_*)"
+        - "CMake kit (pk_create_*, pk_project_setup, options)"
+        - "Project trees (pk tree, .pk/tree.conf, --omit)"
+        - "pk sync or pk rename"
+        - "verify, package or release"
+        - "CI (pk-setup, verify.yml, release.yml)"
+        - "Installing QCDX (pipx, uv, pip, pk.pyz, CMake or Conan package)"
+        - Docs
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: QCDX version
+      description: "`pk --version`. Inside a project it prints the kit version too, paste both."
+      placeholder: "qcdx 0.3.1, kit 0.3.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How is pk installed?
+      options:
+        - pipx
+        - uv tool
+        - pip
+        - pk.pyz
+        - "Only the project's own scripts/pk.py"
+        - "pk_dev (editable install)"
+        - Something else (say which below)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: system
+    attributes:
+      label: System
+      options:
+        - Windows, MSYS2 UCRT64
+        - Windows, MSYS2 CLANG64
+        - Windows, MSYS2 CLANGARM64
+        - Windows, PowerShell or cmd
+        - macOS, Apple silicon
+        - macOS, Intel
+        - Linux x86_64
+        - Linux aarch64
+        - Something else (say which below)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: tree
+    attributes:
+      label: Project tree
+      options:
+        - classic
+        - minimal
+        - My own tree
+        - Not inside a project
+    validations:
+      required: false
+
+  - type: input
+    id: target
+    attributes:
+      label: Target or profile
+      description: Only for a cross build or a release/verify target (e.g., `-x x86_64-mingw-w64`, `windows-ucrt64`).
+    validations:
+      required: false
+
+  - type: textarea
+    id: tools
+    attributes:
+      label: Tool versions
+      description: Run these and paste what they print.
+      value: |
+        pk doctor
+        cmake --version
+        conan --version
+        ninja --version
+        python --version
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: |
+        Screenshots, or files that help (drag them in here).
+        `deps.json`, `.pk/tree.conf`, the Conan profile you used, or the CMake log in `build/<preset>/CMakeFiles/CMakeConfigureLog.yaml` help a lot.
+    validations:
+      required: false

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: No GitHub account? Need to send something private (or a security problem)? Email me at evanrileyreumann@gmail.com
+    url: https://mail.google.com/mail/?view=cm&fs=1&to=evanrileyreumann@gmail.com
+    about: Send what went wrong (or your idea) and I'll put it in here myself (if it's not meant to be private).
+  - name: Documentation
+    url: https://github.com/cooldood155/QCDX#documentation
+    about: Every pk command, the CMake kit, dependencies, trees, releases and platforms.
+  - name: What's new
+    url: https://github.com/cooldood155/QCDX/blob/main/CHANGELOG.md
+    about: Every release and what changed in it.

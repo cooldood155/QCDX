@@ -1,0 +1,70 @@
+name: "Support a tool"
+description: A package manager, build system, compiler, platform or other tool QCDX should fully support.
+title: "[Support]: "
+labels: ["support"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        QCDX is meant to give you full control over the package manager, the build system, the project tree and everything else, with every major one supported.
+        If one you use isn't, this is the place for it.
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of tool?
+      options:
+        - Package manager
+        - Build system / CMake generator
+        - Compiler or toolchain
+        - OS or architecture
+        - Version control
+        - Test framework
+        - IDE or editor
+        - CI service
+        - Packaging format (installer, archive, package for a manager)
+        - Something else (say which below)
+    validations:
+      required: true
+
+  - type: input
+    id: tool
+    attributes:
+      label: Which one, and which version?
+      placeholder: "vcpkg (manifest mode), the Xcode generator, MSVC 19.4x, FreeBSD x86_64, ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: now
+    attributes:
+      label: How do you use it now?
+      description: Without QCDX, or next to it (commands, files, your own scripts, etc.).
+    validations:
+      required: true
+
+  - type: textarea
+    id: want
+    attributes:
+      label: What should QCDX do with it?
+      description: |
+        e.g., `pk new --deps=vcpkg`, `pk build -G Xcode`, a verify/release target for it, a profile, docs, CI.
+        The more exact, the better.
+    validations:
+      required: true
+
+  - type: textarea
+    id: blocking
+    attributes:
+      label: What in QCDX gets in the way today?
+      description: Anything QCDX hard-codes or assumes that stops you (e.g., "every profile sets generator=Ninja").
+    validations:
+      required: false
+
+  - type: textarea
+    id: links
+    attributes:
+      label: Links
+      description: The tool's docs, its CMake integration docs, or an example project using it.
+    validations:
+      required: false

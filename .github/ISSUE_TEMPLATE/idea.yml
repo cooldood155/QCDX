@@ -1,0 +1,65 @@
+name: "New idea"
+description: Something QCDX should do, or do better.
+title: "[Idea]: "
+labels: ["idea"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Don't put anything private in here, everyone can see it! Email me directly at evanrileyreumann@gmail.com if there is anything that you cannot share publicly here.
+        Want QCDX to work with a tool it doesn't support yet (a package manager, generator, compiler, etc.)? Use "Support a tool" instead.
+
+  - type: textarea
+    id: want
+    attributes:
+      label: What should QCDX do (or do better)?
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why? What would it save you (..us, or others)?
+      description: What you do now without it (by hand, another tool, a script of your own, nothing, etc.).
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: How would you know it's done?
+      description: What you could run or see when it works (e.g., "`pk new app --deps=vcpkg` builds and tests on all three systems").
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: area
+    attributes:
+      label: What does it touch?
+      description: Select all that apply.
+      options:
+        - label: Package managers / dependencies
+        - label: Build systems / CMake generators
+        - label: Compilers / toolchains
+        - label: Platforms (OS / architecture)
+        - label: Project tree / layout
+        - label: Version control
+        - label: pk commands
+        - label: CMake kit (pk_create_*, options)
+        - label: Testing, analysis or sanitizers
+        - label: Packaging or releases
+        - label: CI
+        - label: IDEs / editors
+        - label: Docs
+
+  - type: dropdown
+    id: breaks
+    attributes:
+      label: Would it change existing projects?
+      options:
+        - "No, it only adds something"
+        - "Yes, but pk sync (or a pk command) could move them over"
+        - "Yes, and they'd have to change by hand"
+        - Not sure
+    validations:
+      required: false
