@@ -2,7 +2,8 @@
 
 [![ci](https://github.com/cooldood155/QCDX/actions/workflows/ci.yml/badge.svg)](https://github.com/cooldood155/QCDX/actions/workflows/ci.yml) [![release](https://github.com/cooldood155/QCDX/actions/workflows/release.yml/badge.svg)](https://github.com/cooldood155/QCDX/actions/workflows/release.yml) [![template-sync](https://github.com/cooldood155/QCDX/actions/workflows/template-sync.yml/badge.svg)](https://github.com/cooldood155/QCDX/actions/workflows/template-sync.yml)
 
-[![PyPI Downloads](https://img.shields.io/pepy/dt/qcdx?color=crimson&label=downloads&labelColor=maroon&style=flat-square)](https://pepy.tech/projects/qcdx)
+[![PyPI Downloads](https://img.shields.io/pepy/dt/qcdx?color=crimson&label=PyPI+downloads&labelColor=maroon&style=round)](https://pepy.tech/projects/qcdx)
+[![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/cooldood155/badge.svg)](https://hub.xerj.org/contributors/cooldood155)
 
 [Documentation](#documentation)
 
