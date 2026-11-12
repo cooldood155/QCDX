@@ -1,0 +1,73 @@
+name: docs
+
+# Checks for changes ci.yml skips: every link and file a doc names exists,
+# CHANGELOG.md is compliant with VERSION, the README still renders on PyPI
+# (twine check), and the issue forms are valid YAML. One runner, about a
+# minute, instead of the whole ci.yml matrix.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.md'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/workflows/docs.yml'
+      - 'tests/conftest.py'
+      - 'tests/test_docs.py'
+      - 'tests/test_changelog.py'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.md'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/workflows/docs.yml'
+      - 'tests/conftest.py'
+      - 'tests/test_docs.py'
+      - 'tests/test_changelog.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - run: python -m pip install --disable-pip-version-check pytest build twine pyyaml
+
+      - name: Links, named files and the changelog
+        run: python -m pytest -q tests/test_docs.py tests/test_changelog.py
+
+      - name: README renders on PyPI
+        run: |
+          python -m build
+          python -m twine check --strict dist/*.whl dist/*.tar.gz
+
+      - name: Issue forms are valid YAML
+        shell: python
+        run: |
+          import pathlib, sys, yaml
+          bad = 0
+          for form in sorted(pathlib.Path(".github/ISSUE_TEMPLATE").glob("*.y*ml")):
+              try:
+                  data = yaml.safe_load(form.read_text(encoding="utf-8"))
+              except yaml.YAMLError as error:
+                  print(f"::error file={form}::{error}")
+                  bad += 1
+                  continue
+              if form.stem != "config" and not all(key in data for key in ("name", "description", "body")):
+                  print(f"::error file={form}::needs name, description and body")
+                  bad += 1
+          sys.exit(bad)

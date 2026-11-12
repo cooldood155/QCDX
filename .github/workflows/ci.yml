@@ -4,13 +4,36 @@ name: ci
 # pk.pyz), a project made with 'pk new' built and tested on Linux, macOS and
 # Windows, and the CMake and Conan packages of the kit. release.yml runs this
 # same workflow before it publishes anything.
+#
+# Push or pull requests only run when at least one changed file can change what
+# it tests. docs.yml checks the docs and issue forms instead. A run from
+# release.yml (workflow_call) or by hand (workflow_dispatch) always runs
+# everything.
 on:
   push:
     branches: [main]
-    paths-ignore: ['**.md', 'LICENSE']
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/workflows/docs.yml'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/template-sync.yml'
+      - 'dev/template-repo/**'
+      - '.pre-commit-config.yaml'
   pull_request:
     branches: [main]
-    paths-ignore: ['**.md', 'LICENSE']
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/workflows/docs.yml'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/template-sync.yml'
+      - 'dev/template-repo/**'
+      - '.pre-commit-config.yaml'
   workflow_dispatch:
   workflow_call:
 
