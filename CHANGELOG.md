@@ -42,6 +42,9 @@ and/or fixes that directly impact users and is not logged in this document.
 
 ### Fixed
 
+- `pk dep check` and `pk dep rm` scanned the kit's CMake files as the project's
+  when the kit isn't at `cmake/projectkit` (a minimal or `.pk/` tree). Now they
+  skip the kit wherever the tree puts it.
 - Cross builds failed to configure on Windows ("include could not find
   requested file"). The cross profiles built the toolchain path with
   backslashes, and Conan read `\t` and `\x86` in it as a tab and another

@@ -278,8 +278,8 @@ class Repo:
         return self._exec(args, True, check, quiet)
 
     def all_profiles(self):
-        """native first, then the profiles under profiles/ and any --profile
-        recieved. conan.lock covers all of them."""
+        """native first, then every other profile under profiles/ and any
+        --profile given. conan.lock covers all of them."""
         folder = os.path.join(self.root, pktree.load_or_exit(self.root).rel("profiles"))
         found = []
         if os.path.isdir(folder):
@@ -310,10 +310,10 @@ class Repo:
             self.run(args)
 
     def lock_prune(self):
-        """Drop the conan.lock entries that no profile uses. All profiles count
+        """Drop the conan.lock entries no profile uses. Every profile counts
         (all_profiles()): Conan's --lockfile-clean only knows the profile it
-        was ran with, and drops what the others need. A profile whose graph
-        can't be read = nothing is dropped."""
+        runs with, and drops what only the others need (gtk on Linux, etc.).
+        A profile whose graph can't be read = nothing is dropped."""
         lock = self.load_lock()
         if not lock:
             return
@@ -639,11 +639,12 @@ def discover_cmake(repo, name, entry):
 
 
 def _cmake_files(root):
+    kit = os.path.normpath(pktree.load_or_exit(root).rel("kit"))
     for here, dirs, files in os.walk(root):
         rel = os.path.relpath(here, root)
         dirs[:] = [d for d in dirs if d not in SCAN_SKIP_DIRS
                    and not d.startswith("cmake-build")
-                   and os.path.join(rel, d).replace("\\", "/") not in ("cmake/projectkit", "./cmake/projectkit")]
+                   and os.path.normpath(os.path.join(rel, d)) != kit]
 
         for fname in files:
             if fname == "CMakeLists.txt" or fname.endswith(".cmake"):
@@ -1186,7 +1187,7 @@ def cmd_rm(repo, args):
         repo.save_manifest(manifest)
         before = repo.locked_versions(revisions=True)
         if repo.dry_run:
-            info("would prune conan.lock (all profiles under profiles/)")
+            info("would prune conan.lock (every profile under profiles/)")
             return 0
         if os.path.isfile(repo.lock_path):
             repo.lock_prune()
@@ -1236,7 +1237,7 @@ def cmd_lock(repo, args):
         step("lock ({})".format(", ".join(repo.profiles)))
         repo.lock_create()
         if args.clean:
-            step("clean (profiles under profiles/)")
+            step("clean (every profile under profiles/)")
             repo.lock_prune()
 
         if repo.dry_run:
