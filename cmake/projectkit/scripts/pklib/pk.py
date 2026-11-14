@@ -81,7 +81,7 @@ COMMAND_FLAGS = {
     "install": TREE_FLAGS + CONFIG_FLAGS + ["jobs", "prefix"],
     "stage": TREE_FLAGS + CONFIG_FLAGS + ["jobs", "consumer"],
     "clean": ["type", "cross", "variant", "all", "deps", "yes", "dry"],
-    "full-clean": ["cache", "yes", "dry"],
+    "full-clean": ["keepdeps", "cache", "yes", "dry"],
     "format": ["check", "dry"],
     "doctor": ["fix"],
     "sync": ["from", "branch", "base", "nocommit", "dry"],
@@ -95,7 +95,8 @@ FLAG_SPELLING = {
     "analyze": "--analyze, --no-analyze", "option": "-O, --option NAME=VALUE",
     "define": "-D NAME=VALUE", "reset": "--reset", "jobs": "-j, --jobs=N", "target": "--target=NAME",
     "filter": "-R, --filter=REGEX", "label": "-L, --label=REGEX", "prefix": "--prefix=DIR",
-    "all": "--all", "deps": "--deps", "check": "--check", "fix": "--fix", "consumer": "--no-consumer",
+    "all": "--all", "deps": "--deps", "keepdeps": "--keep-deps", "check": "--check", "fix": "--fix",
+    "consumer": "--no-consumer",
     "cache": "--cache", "yes": "-y, --yes", "from": "--from=URL|PATH", "branch": "--branch=NAME",
     "base": "--base=COMMIT", "nocommit": "--no-commit",
 }
@@ -104,6 +105,7 @@ SWITCHES = {
     "--dry-run": ("dry", "dry_run", True), "-v": ("verbose", "verbose", True),
     "--verbose": ("verbose", "verbose", True), "--reset": ("reset", "reset", True),
     "--all": ("all", "clean_all", True), "--deps": ("deps", "clean_deps", True),
+    "--keep-deps": ("keepdeps", "keep_deps", True),
     "--check": ("check", "check", True), "-y": ("yes", "assume_yes", True),
     "--yes": ("yes", "assume_yes", True), "--cache": ("cache", "clean_cache", True),
     "--no-consumer": ("consumer", "no_consumer", True), "--no-commit": ("nocommit", "no_commit", True),
@@ -327,6 +329,7 @@ class Pk:
         self.prefix_dir = ""
         self.clean_all = False
         self.clean_deps = False
+        self.keep_deps = False
         self.check = False
         self.fix = False
         self.assume_yes = False
@@ -454,6 +457,7 @@ class Pk:
             "prefix": f"install location, default {self.stage_dir}/",
             "all": f"same as '{self.self_name} full-clean'",
             "deps": "also delete the Conan output for this build type",
+            "keepdeps": "keep the Conan output in build/, so nothing reinstalls",
             "check": "list files that need formatting, change nothing (exit 1 if any)",
             "fix": "create Conan's default profile when it is missing",
             "consumer": "skip building a consumer project against stage/",
@@ -478,7 +482,7 @@ class Pk:
             "run": "run [APP] [TYPE] [flag...] [-- app args]",
             "clean": "clean [TYPE] [flag...]",
             "stage": "stage [TYPE] [flag...]",
-            "full-clean": "full-clean [--cache] [-y] [-n]",
+            "full-clean": "full-clean [--keep-deps] [--cache] [-y] [-n]",
             "sync": "sync [--from URL|PATH] [--branch NAME] [--base COMMIT] [--no-commit] [-n]",
             "format": "format [--check] [path...]",
             "help": "help [command]",
@@ -498,7 +502,8 @@ class Pk:
             "install": [f"{s} install release", f"{s} install --prefix=/tmp/{p}"],
             "clean": [f"{s} clean", f"{s} clean release --deps"],
             "sync": [f"{s} sync -n", f"{s} sync", f"{s} sync --from /path/to/QCDX"],
-            "full-clean": [f"{s} full-clean -n", f"{s} full-clean", f"{s} full-clean --cache --yes"],
+            "full-clean": [f"{s} full-clean -n", f"{s} full-clean", f"{s} full-clean --keep-deps",
+                           f"{s} full-clean --cache --yes"],
             "stage": [f"{s} stage", f"{s} stage release --lib=shared",
                       f'grep "^check|" {self.stage_dir}/pk-stage.txt'],
             "analyze": [f"{s} analyze"],
@@ -546,7 +551,9 @@ class Pk:
                            "test_package build, clangd's index, other CMake build dirs (build-*,",
                            "cmake-build-*), Conan-written presets and sanitizer logs. Lists what exists",
                            "and asks first. Ignored files it does not own (.vscode/, docs/notes...) are",
-                           "listed afterwards but never touched."],
+                           "listed afterwards but never touched. --keep-deps keeps every Conan output",
+                           "folder in build/ and the Conan-written presets, so the next build only",
+                           "configures and compiles."],
             "stage": ["Like verify's install and consumer stages, for the tree you build with:",
                       f"{self.stage_dir}/ is emptied, the tree is installed into it, the package files",
                       "are checked, pkg-config reads the .pc, and a consumer project is built",
@@ -1100,6 +1107,15 @@ class Pk:
             return path[len(self.root) + 1:].replace(os.sep, "/")
         return path
 
+    def conan_outputs(self) -> List[str]:
+        """Every folder right under build/ that Conan has installed into (has
+        Conan's toolchain), for full-clean --keep-deps."""
+        build = os.path.join(self.root, "build")
+        if not os.path.isdir(build):
+            return []
+        return sorted(os.path.join(build, name) for name in os.listdir(build)
+                      if os.path.isfile(os.path.join(build, name, "generators", "conan_toolchain.cmake")))
+
     def full_clean_paths(self) -> List[str]:
         root = self.root
         candidates = self.v.clean_paths() + [
@@ -1111,6 +1127,17 @@ class Pk:
             os.path.join(root, ".ninja_deps"),
             os.path.join(root, ".ninja_log"),
         ]
+        if self.keep_deps:
+            # build/ goes folder by folder, Conan's own and the presets it wrote stay
+            build = os.path.normpath(os.path.join(root, "build"))
+            kept = [os.path.normpath(path) for path in self.conan_outputs()]
+            kept += [os.path.normpath(os.path.join(root, name)) for name in ("CMakeUserPresets.json",
+                                                                            "ConanPresets.json")]
+            candidates = [path for path in candidates
+                          if os.path.normpath(path) != build and os.path.normpath(path) not in kept]
+            if os.path.isdir(build):
+                candidates += sorted(os.path.join(build, name) for name in os.listdir(build)
+                                     if os.path.join(build, name) not in kept)
         for pattern in ("build-*", "cmake-build-*", "asan.log.*", "ubsan.log.*"):
             candidates += sorted(glob.glob(os.path.join(root, pattern)))
         seen: List[str] = []

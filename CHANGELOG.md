@@ -33,6 +33,13 @@ and/or fixes that directly impact users and is not logged in this document.
 
 ## [Unreleased]
 
+### Added
+
+- `pk full-clean --keep-deps`: deletes everything `full-clean` does except
+  Conan's output (every folder in `build/` with Conan's toolchain, and the
+  presets Conan wrote). The next build only configures and compiles, it
+  doesn't reinstall the dependencies.
+
 ### Fixed
 
 - Cross builds failed to configure on Windows ("include could not find

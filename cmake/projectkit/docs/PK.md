@@ -149,6 +149,12 @@ emptying, no checks, any `--prefix`.
 - other CMake build directories: `build-*`, `cmake-build-*`
 - sanitizer logs in the project root: `asan.log.*`, `ubsan.log.*`
 
+`--keep-deps` deletes all of that except Conan's output: every folder in
+`build/` that has Conan's toolchain (`build/Debug/`, `build/Release/`, a cross
+target's...) and the presets Conan wrote (`CMakeUserPresets.json`,
+`ConanPresets.json`). The next build only configures and compiles, nothing is
+reinstalled.
+
 `--cache` also removes this package from the local Conan cache (what
 `package.py create` put there). `-n` only lists, `-y` skips the question, and
 without a terminal pk refuses to delete unless `-y` is given.
@@ -216,6 +222,7 @@ one sync only, so the committed file never points at one person's disk.
 | `-R`, `--filter` / `-L`, `--label`  | ctest selection                                 |
 | `--prefix=DIR`                      | install location                                |
 | `--no-consumer`                     | `stage` without the consumer project            |
+| `--keep-deps`                       | `full-clean` keeps Conan's output in `build/`   |
 | `--cache`                           | `full-clean` also empties the Conan cache entry |
 | `-y`, `--yes`                       | delete without asking                           |
 | `--from=URL\|PATH`                  | `sync` from another template URL or local clone |
