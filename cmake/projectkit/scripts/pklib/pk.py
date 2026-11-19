@@ -828,10 +828,10 @@ class Pk:
     def library_names(self) -> List[str]:
         if not self.layout.has("include"):
             return []
-        libraries = self.layout.path(self.root, "libraries")
-        if not os.path.isdir(libraries):
+        headers = self.layout.path(self.root, "headers")
+        if not os.path.isdir(headers):
             return []
-        return sorted(name for name in os.listdir(libraries) if os.path.isdir(os.path.join(libraries, name)))
+        return sorted(name for name in os.listdir(headers) if os.path.isdir(os.path.join(headers, name)))
 
     def select(self) -> None:
         if not have("cmake"):

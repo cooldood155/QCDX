@@ -16,6 +16,15 @@ from . import resources
 _loaded = None
 
 
+def _ensure_utf8() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
 def kit_problems():  # -> module pklib.problems, or None
     global _loaded
     if _loaded is None:
@@ -29,7 +38,8 @@ def kit_problems():  # -> module pklib.problems, or None
 
             common.setup_output()
             _loaded = problems
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            sys.stderr.write(f"kit_problems failed: {exc!r}\n")
             _loaded = False
     return _loaded or None
 
@@ -37,6 +47,7 @@ def kit_problems():  # -> module pklib.problems, or None
 def report(code: str, message: str, why: str = "", fixes: Sequence[str] = (), details: Sequence[str] = ()) -> None:
     """Prints an error; `fixes` are what to do, one line each. Outside a
     project nothing is recorded, so there is no 'pk fix' here."""
+    _ensure_utf8()
     problems = kit_problems()
     if problems is None:
         for line in details:
@@ -52,6 +63,7 @@ def report(code: str, message: str, why: str = "", fixes: Sequence[str] = (), de
 
 
 def explain(argv: List[str]) -> int:
+    _ensure_utf8()
     problems = kit_problems()
     if problems is None:
         sys.stderr.write("pk explain: the kit's error catalog could not be loaded\n")

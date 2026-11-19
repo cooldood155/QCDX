@@ -398,9 +398,14 @@ def doc_target(doc: str, online: bool = False) -> Tuple[str, str]:
         url = f"{REPO_URL}/blob/{'v' + version if version else 'main'}/cmake/projectkit/docs/{name}"
         url += f"#{anchor}" if anchor else ""
         return url, url
-    shown_path = os.path.relpath(path)
-    if shown_path.startswith(".."):
-        shown_path = path
+
+    shown_path = path
+    try:
+        relative = os.path.relpath(path)
+        if not relative.startswith(".."):
+            shown_path = relative
+    except ValueError:
+        pass
     shown_path = shown_path.replace(os.sep, "/")
     return shown_path + (f"#{anchor}" if anchor else ""), path
 
@@ -635,7 +640,11 @@ def short_path(path: str) -> str:
     """`path` relative to the current directory when it is below it."""
     if not os.path.isabs(path):
         return path
-    relative = os.path.relpath(path)
+    try:
+        relative = os.path.relpath(path)
+    except ValueError:
+        return path
+
     return path if relative.startswith("..") else relative.replace(os.sep, "/")
 
 

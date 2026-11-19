@@ -46,6 +46,7 @@ flags:
 class Package:
     def __init__(self, root: str) -> None:
         conf = load_conf(root, pktree.helper(root, "package/package.conf"))
+        self.runner: Optional[Callable[[List[str]], int]] = None
         self.root = root
         self.profile = conf.get("PK_PROFILE")
         self.host_profile = conf.get("PK_HOST_PROFILE")
@@ -69,6 +70,8 @@ class Package:
         out(f"{C.bold}--{C.reset} {message}")
 
     def run(self, argv: List[str]) -> int:
+        if self.runner is not None:
+            return self.runner(argv)
         out(f"{C.yellow}+{C.reset} {shown(argv)}")
         return 0 if self.dry_run else run(argv)
 
@@ -131,6 +134,7 @@ def _main(
                      "no conanfile.py found above {cwd}: set PK_REPO_ROOT")
     setup_output()
     pk = Package(root)
+    pk.runner = runner
     self_name = "./scripts/package.py"
 
     def usage(write=out) -> None:

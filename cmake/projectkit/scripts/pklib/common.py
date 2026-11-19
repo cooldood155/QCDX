@@ -52,9 +52,11 @@ def setup_output() -> None:
     """Configures stream encoding error handlers and initializes the global
     ANSI color codes if supported."""
     for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is not None:
-            reconfigure(errors="replace")
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
 
     if C.reset or os.environ.get("NO_COLOR") or not sys.stdout.isatty() or not _console_ansi():
         return

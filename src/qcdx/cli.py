@@ -15,6 +15,7 @@ from typing import List, Optional
 
 from . import errors, new, registry, resources
 from .layout import project_script, tree_part
+from .errors import _ensure_utf8
 
 HELP = """\
 pk - QCDX {version}: create and build C and C++ projects with CMake and Conan
@@ -151,6 +152,7 @@ def tree_outside(argv: List[str]) -> int:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    _ensure_utf8()
     try:
         return run(list(sys.argv[1:] if argv is None else argv))
     except BrokenPipeError:  # 'pk ... | head'
