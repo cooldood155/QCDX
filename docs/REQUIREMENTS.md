@@ -119,14 +119,15 @@ compile C as C23 there.
 
 | Cross target | Toolchain | Version | Source |
 | :-- | :-- | :-- | :-- |
-| `x86_64-linux-gnu` | `x86_64-linux-gnu-gcc` | GCC 13 (written into profile) | Debian/Ubuntu `g++-x86-64-linux-gnu` |
-| `aarch64-linux-gnu` | `aarch64-linux-gnu-gcc` | GCC 13 (written into profile) | Debian/Ubuntu `g++-aarch64-linux-gnu` |
+| `x86_64-linux-gnu` | `x86_64-linux-gnu-gcc` | detected | Debian/Ubuntu `g++-x86-64-linux-gnu` |
+| `aarch64-linux-gnu` | `aarch64-linux-gnu-gcc` | detected | Debian/Ubuntu `g++-aarch64-linux-gnu` |
 | `x86_64-mingw-w64` | `x86_64-w64-mingw32-gcc` (posix threads) | detected | Debian/Ubuntu `g++-mingw-w64-x86-64` |
 | `aarch64-mingw-llvm-w64` | `aarch64-w64-mingw32-clang` | llvm-mingw 20260616 (LLVM 22.1.8), UCRT build | pinned with its SHA-256 in `pk-setup` |
 
-The two Linux cross profiles hard-code `compiler.version=13`. A different GCC
-version will build fine, but the produced binaries will still be cached under
-GCC 13's package ID until the profile is edited.
+The two Linux cross profiles detect `compiler.version` from their
+triple-prefixed GCC binary (falling back to native `gcc` when running on a
+matching Linux host architecture) so binaries are cached under the actual
+toolchain version's package ID.
 
 ## Optional
 
