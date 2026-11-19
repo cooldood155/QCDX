@@ -480,7 +480,7 @@ class Pk:
         from . import package
 
         try:
-            return package.main(args, self.root, runner)
+            return package.main(args, self.root, runner=runner)
         except SystemExit as stop:
             return exit_code(stop)
 
@@ -824,6 +824,14 @@ class Pk:
         if not os.path.isdir(apps):
             return []
         return sorted(name for name in os.listdir(apps) if os.path.isdir(os.path.join(apps, name)))
+
+    def library_names(self) -> List[str]:
+        if not self.layout.has("include"):
+            return []
+        libraries = self.layout.path(self.root, "libraries")
+        if not os.path.isdir(libraries):
+            return []
+        return sorted(name for name in os.listdir(libraries) if os.path.isdir(os.path.join(libraries, name)))
 
     def select(self) -> None:
         if not have("cmake"):
@@ -1826,6 +1834,11 @@ class Pk:
         apps = self.app_names()
         for app in apps or ["none"]:
             out(f"  {app}")
+
+        out(f"\n{C.bold}libraries{C.reset}")
+        libraries = self.library_names()
+        for library in libraries or ["none"]:
+            out(f"  {library}")
 
         out(f"\n{C.bold}cross targets{C.reset} (pk build -x NAME)")
         names = self.cross_names()

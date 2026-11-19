@@ -7,10 +7,8 @@ from __future__ import annotations
 import json
 import os
 import shutil
-from functools import partial
 from typing import Callable, Dict, List, Optional
 
-from . import problems
 from . import tree as pktree
 from .common import (BUILD_TYPES, SCRIPTS_DIR, C, capture, confirm, entry, err, load_conf, native_path, out,
                      repo_root, run, setup_output, shown)
@@ -62,20 +60,15 @@ class Package:
         self.assume_yes = False
         self.dry_run = False
         self._recipe: Optional[Dict[str, object]] = None
-        # pk's own steps run conan through this (quiet, logged); 'pk package' itself streams
-        self.runner: Optional[Callable[[List[str]], int]] = None
 
-    def die(self, message: str, code: str = "PK411", fixes: Optional[List[Dict[str, object]]] = None) -> None:
-        problems.report(problems.Problem(code, message, fixes=fixes or []))
+    def die(self, message: str) -> None:
+        err(f"{C.red}error{C.reset}  {message}")
         raise SystemExit(1)
 
     def note(self, message: str) -> None:
-        if self.runner is None:
-            out(f"{C.bold}--{C.reset} {message}")
+        out(f"{C.bold}--{C.reset} {message}")
 
     def run(self, argv: List[str]) -> int:
-        if self.runner is not None:
-            return self.runner(argv)
         out(f"{C.yellow}+{C.reset} {shown(argv)}")
         return 0 if self.dry_run else run(argv)
 
@@ -119,19 +112,25 @@ class Package:
         return [f"-tf={kit_test}"] if os.path.isdir(kit_test) else []
 
 
-def main(argv: List[str], root: Optional[str] = None, runner: Optional[Callable[[List[str]], int]] = None) -> int:
-    """`runner` runs each conan command instead of streaming it (pk's deps
-    step); it also prints the command for --dry-run."""
-    return entry(partial(_main, runner=runner), argv, root)
+def main(
+    argv: List[str],
+    root: Optional[str] = None,
+    runner: Optional[Callable[[List[str]], int]] = None
+) -> int:
+    return entry(lambda a, r: _main(a, r, runner=runner), argv, root)
 
 
-def _main(argv: List[str], given_root: Optional[str], runner: Optional[Callable[[List[str]], int]] = None) -> int:
+
+def _main(
+    argv: List[str],
+    given_root: Optional[str],
+    runner: Optional[Callable[[List[str]], int]] = None
+) -> int:
     root = repo_root(given_root, lambda d: os.path.isfile(os.path.join(d, "conanfile.py"))
                      or os.path.isfile(os.path.join(d, "conanfile.txt")),
                      "no conanfile.py found above {cwd}: set PK_REPO_ROOT")
     setup_output()
     pk = Package(root)
-    pk.runner = runner
     self_name = "./scripts/package.py"
 
     def usage(write=out) -> None:
@@ -195,8 +194,7 @@ def _main(argv: List[str], given_root: Optional[str], runner: Optional[Callable[
             pk.die(f"invalid build type: '{build_type}'")
 
     if not shutil.which(pk.conan):
-        pk.die("conan is not on PATH", "PK300",
-               [problems.fix_hint('python -m pip install conan    (or: pipx install "qcdx[tools]")')])
+        pk.die("conan is not on PATH")
 
     build_profile = pk.profile_path(profile_arg or pk.profile)
     if host_profile_arg or pk.host_profile:
@@ -276,6 +274,5 @@ def _main(argv: List[str], given_root: Optional[str], runner: Optional[Callable[
         usage(err)
         return 2
 
-    if pk.runner is None:  # pk's own steps say it themselves
-        out(f"{C.green}ok{C.reset}" if status == 0 else f"{C.red}failed{C.reset}")
+    out(f"{C.green}ok{C.reset}" if status == 0 else f"{C.red}failed{C.reset}")
     return status
