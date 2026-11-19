@@ -74,8 +74,10 @@ Check the tools, then build, run and test:
 ```
 
 The first `build` installs the Conan dependencies and configures CMake; later
-builds only rebuild. Every Conan and CMake command `pk` runs is printed before
-it runs, and `-n` prints them without running anything.
+builds only rebuild. Each step is one line, with the whole output kept in
+`build/pk-logs/`; `-v` shows every Conan and CMake command and all of its
+output, and `-n` prints the commands without running anything. When something
+fails, `pk fix` fixes it and `pk explain` says what the error means.
 
 Then replace this README with your own project's.
 

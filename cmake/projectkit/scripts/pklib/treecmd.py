@@ -18,6 +18,8 @@ import tempfile
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from . import tree as pktree
+from .problems import Problem, fix_hint
+from .problems import report as report_problem
 from .common import C, capture, confirm, err, lines, out, run, setup_output
 from .tree import BY_KEY, PARTS, Tree, TreeError
 
@@ -507,13 +509,14 @@ def cmd_apply(root: str, self_name: str, args: List[str]) -> int:
     try:
         old = pktree.load(root)
     except TreeError as error:
-        err(f"{C.red}error{C.reset}: the current tree is broken, nothing changed:\n  {error}\n"
-            f"  '{self_name} reset' goes back to the last tree that worked")
+        report_problem(Problem("PK201", "the current tree is broken, nothing changed", str(error),
+                               [fix_hint(f"{self_name} reset    (goes back to the last tree that worked)")]))
         return 1
     try:
         new = read_tree(spec, omit)
     except TreeError as error:
-        err(f"{C.red}error{C.reset}: {spec} is not a tree pk can use, nothing changed:\n  {error}")
+        report_problem(Problem("PK900", f"{spec} is not a tree pk can use, nothing changed", str(error),
+                               [fix_hint(f"{self_name} check {spec}    (what exactly is wrong)")]))
         return 1
 
     if new == old:
@@ -522,7 +525,9 @@ def cmd_apply(root: str, self_name: str, args: List[str]) -> int:
     plan = Plan(root, old, new)
     show_plan(plan)
     if plan.problems:
-        err(f"\n{C.red}error{C.reset}: nothing changed:\n  " + "\n  ".join(plan.problems))
+        err("")
+        report_problem(Problem("PK900", "the new tree cannot be applied, nothing changed",
+                               details=[f"  {problem}" for problem in plan.problems]))
         return 1
 
     git = in_git(root)
@@ -537,10 +542,9 @@ def cmd_apply(root: str, self_name: str, args: List[str]) -> int:
         dirty = [line for line in lines(["git", "status", "--porcelain", "--", *[t for t in touched if os.path.lexists(
             os.path.join(root, *t.split("/")))]], cwd=root) if line[3:].strip('"') not in own]
         if dirty:
-            for line in dirty:
-                err(f"  {line}")
-            err(f"{C.red}error{C.reset}: uncommitted changes where files move (above): commit or stash them "
-                "first, nothing changed")
+            report_problem(Problem("PK900", "uncommitted changes where files move, nothing changed",
+                                   details=[f"  {line}" for line in dirty],
+                                   fixes=[fix_hint("commit or stash them first: git stash push")]))
             return 1
     if dry_run:
         out("\ndry run: nothing changed")
@@ -555,7 +559,7 @@ def cmd_apply(root: str, self_name: str, args: List[str]) -> int:
     try:
         stale = perform(plan)
     except (ApplyError, OSError, TreeError) as error:
-        err(f"{C.red}error{C.reset}: {error}\nevery file is back where it was")
+        report_problem(Problem("PK900", str(error), "every file is back where it was"))
         return 1
 
     out(f"{C.green}done{C.reset}: the project has the new tree ({describe(new)})")
@@ -637,8 +641,9 @@ def cmd_reset(root: str, self_name: str, args: List[str]) -> int:
     target = args[0] if args else pktree.DRAWING_FILE
     tree, label = last_working(root)
     if tree is None:
-        err(f"{C.red}error{C.reset}: no tree matches the files any more (tree.conf, the committed one and the "
-            f"classic one all miss a part); '{self_name} check' lists what is missing")
+        report_problem(Problem("PK201", "no tree matches the files any more",
+                               "tree.conf, the committed one and the classic one all miss a part",
+                               [fix_hint(f"{self_name} check    (lists what is missing), then put those files back")]))
         return 1
     conf = os.path.join(root, *pktree.TREE_FILE.split("/"))
     current = None

@@ -1,8 +1,10 @@
 # pk.py
 
 One command line for every day-to-day workflow of a projectkit'd project. `pk`
-decides which Conan and CMake steps a request needs, runs only those, and
-prints every command before it runs it.
+decides which Conan and CMake steps a request needs and runs only those, one
+line per step (`--verbose` shows every command and all of its output). When
+something fails it says why, how to fix it and where to read more, and
+`pk fix` applies the fix.
 
 ```bash
 ./scripts/pk.py build            # deps + configure + build, Debug
@@ -59,6 +61,8 @@ type pk
 | `status`    | build trees, their options, Conan output, compile_commands.json |
 | `list`      | build types, apps, cross targets and whether each is ready      |
 | `doctor`    | required and optional tools; `--fix` creates Conan's profile    |
+| `fix`       | apply the last error's fix, then run the failed command again   |
+| `explain`   | what an error code means (`why` too); the last error without one|
 | `sync`      | update the kit from the QCDX template, as one commit            |
 | `tree`      | show, check, draw or change where each part lives (`TREE.md`)   |
 | `verify`    | runs `scripts/verify.py` with the given arguments               |
@@ -101,6 +105,103 @@ cannot be run: `run`, `test`, `memcheck` and `sanitize` refuse `-x`.
 **Variants.** `--variant=NAME` builds in `build/<preset>-NAME`, a separate tree
 with its own remembered options. `analyze`, `memcheck` and `sanitize` use one
 automatically so your normal tree keeps compiling quick.
+
+## Output and errors
+
+Each step is one line; the time is added once it is done:
+
+```text
+demo  build  Debug  native  tree build/native-debug
+==> deps Debug (native): not installed yet  2.1s
+==> configure native-debug: new tree  1.6s
+src/demo/core.cpp: In function 'int unused(int)':
+src/demo/core.cpp:15:28: warning: unused variable 'y' [-Wunused-variable]
+==> build build/native-debug  1.4s, 1 warning
+done in 5.3s
+```
+
+On a terminal the step's line shows what the tool is doing right now. Only
+what needs reading is printed: compiler and CMake warnings when they happen,
+messages your own `CMakeLists.txt` prints, failing tests, and the error. The
+whole output of every step is kept in `build/pk-logs/<tree>.<step>.log`
+(`native-debug.build.log`, ...), overwritten by the next run of that step. On
+GitHub Actions a failed step also prints its whole output, folded in a group.
+
+`-v`/`--verbose` shows everything instead: each command line and every line
+of its output, live, with the tools at their most detailed (Conan `-vvv`,
+CMake `--log-level=TRACE`, `cmake --build -v`, `ctest -VV`). `PK_VERBOSE=1`
+in `pk.conf` or the environment makes it the default. `-n` prints the
+commands without running them.
+
+When a step fails, the tool's own lines that matter come first (Conan's
+`ERROR` lines, CMake's `CMake Error` block, the failed compile), then the
+error, always in this shape:
+
+```text
+error[PK401]: conan install failed for Debug (native)
+   why  Conan's profile plugin rejects compiler.cstd=23 for gcc 13; it takes 99, gnu99, 11, gnu11, 17, gnu17
+   fix  set compiler.cstd=17 in profiles/native
+        'pk fix' does it for you, then runs the failed command again
+    or  use a newer gcc, one Conan allows compiler.cstd=23 for
+   log  build/pk-logs/native-debug.deps.log
+  docs  https://docs.conan.io/2/reference/extensions/profile_plugin.html
+        https://docs.conan.io/2/reference/config_files/profiles.html
+        pk explain PK401
+```
+
+`why` is the cause pk read from the output, `fix` what to do (commands to
+copy, or a change pk can make), `docs` where to read more: this kit's
+documents, CMake's and Conan's. Paths and links are clickable in terminals
+that support it (`PK_LINKS=0` turns that off).
+
+**pk fix.** The last error is kept in `build/pk-last-error.json`. `pk fix`
+shows what it will do, asks, does it (runs the command, or edits the file),
+then runs the command that failed again. Typos are fixed the same way:
+`pk biuld` and `pk build --wererror` record the command they most likely
+meant. Errors only you can fix, like a compile error, are shown again
+instead. `pk fix -n` only shows the plan, `pk fix --yes` does not ask. A
+command that works afterwards forgets the error.
+
+**pk explain.** Every error has a code; `pk explain PK401` (or `401`) says what
+it means, the usual causes and links to read more, online ones included.
+Without a code it explains the last error; `pk explain --list` lists them.
+The global `pk` explains codes outside a project too.
+
+**Readers.** pk's core knows steps (deps, configure, build, test, install),
+not tools. What a tool prints is read by one module per tool in
+`scripts/pklib/readers/`: `cmake.py`, `ninja.py`, `compilers.py` (GCC, Clang,
+MSVC and their linkers, under any build tool), `ctest.py` and `conan.py`. A
+reader explains an error (code, why, fix), picks what a quiet step prints and
+which of the tool's lines go above the error, and names the tool's own
+documents for `pk explain`. A tool without a reader still works: its output
+is printed in full and a failure gets the step's general code. Supporting
+another package manager, build tool or compiler is one more module there.
+
+A project can add its own in `scripts/helpers/pk/readers/*.py` (wherever
+`pk tree` puts the helpers), loaded after the kit's, e.g. to explain an
+error of its own CMake code:
+
+```python
+from pklib.problems import fix_hint
+from pklib.readers import Diagnosis, reader
+
+@reader("configure", order=5)  # lower runs first; the kit's run at 10 to 70
+def no_assets(text, context):
+    if "assets/ is missing" in text:
+        return Diagnosis("PK500", "the assets were not downloaded", [fix_hint("./get-assets.sh")])
+```
+
+| Codes   | About                                                           |
+|---------|-----------------------------------------------------------------|
+| `PK1xx` | what was typed: commands, flags, values                         |
+| `PK2xx` | the project: its tree, presets, settings, cross targets         |
+| `PK3xx` | tools and the machine                                           |
+| `PK4xx` | dependencies: Conan, `pk dep`, `pk package`                     |
+| `PK5xx` | configure: CMake                                                |
+| `PK6xx` | build and install: the compiler and linker                      |
+| `PK7xx` | run and test                                                    |
+| `PK8xx` | `sync` and git                                                  |
+| `PK9xx` | the other tools: `tree`, `rename`, `release`, `verify`, `new`   |
 
 ## stage: a checked install you can parse
 
@@ -224,13 +325,13 @@ one sync only, so the committed file never points at one person's disk.
 | `--no-consumer`                     | `stage` without the consumer project            |
 | `--keep-deps`                       | `full-clean` keeps Conan's output in `build/`   |
 | `--cache`                           | `full-clean` also empties the Conan cache entry |
-| `-y`, `--yes`                       | delete without asking                           |
+| `-y`, `--yes`                       | do not ask first (delete, `fix`)                |
 | `--from=URL\|PATH`                  | `sync` from another template URL or local clone |
 | `--branch=NAME`                     | `sync` from another template branch             |
 | `--base=COMMIT`                     | `sync` from this template commit, not the guess |
 | `--no-commit`                       | `sync` stages the update instead of committing  |
 | `-n`, `--dry-run`                   | print commands only                             |
-| `-v`, `--verbose`                   | full compiler command lines                     |
+| `-v`, `--verbose`                   | every command and all of its output, live       |
 
 Each command accepts only the flags that mean something to it; anything else
 is an error that names the command's help page.
@@ -249,11 +350,12 @@ PK_FORMAT_EXCLUDE="cmake/projectkit/ build/ stage/ _install/"
 PK_UPSTREAM_URL=https://github.com/cooldood155/QCDX.git # sync's template
 PK_UPSTREAM_BRANCH=main
 PK_SYNC_PATHS="cmake/projectkit scripts/pk.py scripts/verify.py scripts/package.py scripts/release.py scripts/bootstrap.py .github/actions/pk-setup"
+PK_VERBOSE=1                             # --verbose by default
 ```
 
 A fork of the template should set `PK_UPSTREAM_URL` to its own repository.
 
-`NO_COLOR=1` turns colors off.
+`NO_COLOR=1` turns colors off, `PK_LINKS=0` the clickable links.
 
 ## Limits
 

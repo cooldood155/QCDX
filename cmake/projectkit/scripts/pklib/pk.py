@@ -1,8 +1,10 @@
 """pk: one CLI for every day-to-day projectkit workflow.
 
-Conan and CMake are still what does the work: every command pk runs is
-printed before it runs, nothing is hidden; every command invocation and
-output can be easily seen, copied, and parsed.
+Conan and CMake are still what does the work, and nothing is hidden: each
+step prints one line and keeps the tool's whole output in build/pk-logs/,
+--verbose prints every command and every line live, and -n prints the
+commands without running them (steps.py). When something fails, pk says why,
+how to fix it and where to read more (problems.py); 'pk fix' applies the fix.
 
 pk only decides *which* commands are needed:
 
@@ -26,13 +28,15 @@ import tempfile
 import time
 import zlib
 from functools import lru_cache
-from typing import List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
-from . import targets
+from . import problems, readers, targets
 from . import tree as pktree
 from .common import (BUILD_TYPES, SCRIPTS_DIR, C, capture, confirm, entry, err, exit_code, flush, has_file,
                      have, host_arch, host_platform, lines, load_conf, native_path, out, output, remove,
                      repo_root, run, script_env, setup_output, shown, walk_files)
+from .problems import Problem, fix_hint, fix_run
+from .steps import Result, Runner
 from .verify_base import Verify
 
 COMMANDS = (
@@ -57,6 +61,8 @@ COMMANDS = (
     ("inspect", "status", "st", "", "show build trees, their options and dependency state"),
     ("inspect", "list", "ls", "", "list build types, apps, cross targets and presets"),
     ("inspect", "doctor", "", "", "check tools and environment (--fix to repair)"),
+    ("when something fails", "fix", "", "", "apply the last error's fix, then run the failed command again"),
+    ("when something fails", "explain", "", "why", "explain an error code (the last error without one)"),
     ("project and shell", "sync", "", "upgrade", "update the kit (projectkit, scripts) from the QCDX template"),
     ("project and shell", "tree", "", "layout", "show, check, draw or change where each part of the project lives"),
     ("project and shell", "rename", "", "bootstrap", "rename a project made from the template"),
@@ -80,10 +86,11 @@ COMMAND_FLAGS = {
     "sanitize": TREE_FLAGS + CONFIG_FLAGS + ["jobs", "filter", "label"],
     "install": TREE_FLAGS + CONFIG_FLAGS + ["jobs", "prefix"],
     "stage": TREE_FLAGS + CONFIG_FLAGS + ["jobs", "consumer"],
-    "clean": ["type", "cross", "variant", "all", "deps", "yes", "dry"],
-    "full-clean": ["keepdeps", "cache", "yes", "dry"],
-    "format": ["check", "dry"],
+    "clean": ["type", "cross", "variant", "all", "deps", "yes", "dry", "verbose"],
+    "full-clean": ["keepdeps", "cache", "yes", "dry", "verbose"],
+    "format": ["check", "dry", "verbose"],
     "doctor": ["fix"],
+    "fix": ["yes", "dry"],
     "sync": ["from", "branch", "base", "nocommit", "dry"],
 }
 FLAG_SPELLING = {
@@ -222,9 +229,11 @@ Register-ArgumentCompleter -Native -CommandName pk -ScriptBlock {
 }"""
 
 
-def die_tree(error: Exception) -> None:
-    err(f"{C.red}pk{C.reset}: the project tree (.pk/tree.conf) is broken: {error}")
-    err("  'pk tree check' explains it; 'pk tree reset' goes back to the last tree that worked")
+def die_tree(error: Exception, root: str) -> None:
+    problems.report(Problem("PK201", "the project tree (.pk/tree.conf) is broken", str(error),
+                            [fix_run(["pk", "tree", "reset"], "go back to the last tree that worked"),
+                             fix_hint("pk tree check    (what exactly is wrong)")], status=2),
+                    root, sys.argv[1:])
     raise SystemExit(2)
 
 
@@ -293,10 +302,10 @@ class Pk:
         try:
             self.layout = pktree.load(root)
         except pktree.TreeError as error:
-            die_tree(error)
+            die_tree(error, root)
         missing = self.layout.missing(root, required_only=True)
         if missing:
-            die_tree(pktree.TreeError("it does not match the files:\n  " + "\n  ".join(missing)))
+            die_tree(pktree.TreeError("it does not match the files:\n" + "\n".join(missing)), root)
         conf = load_conf(root, self.layout.rel("helpers", "pk/pk.conf"))
         self.self_name = os.environ.get("PK_SELF_NAME") or "./" + self.layout.rel("scripts", "pk.py")
         self.default_type = conf.get("PK_DEFAULT_TYPE", "Debug")
@@ -306,6 +315,7 @@ class Pk:
         self.format_exclude = conf.get("PK_FORMAT_EXCLUDE",
                                        f"{self.layout.rel('kit')}/ build/ stage/ _install/").split()
         self.upstream_url = conf.get("PK_UPSTREAM_URL", "https://github.com/cooldood155/QCDX.git")
+        self.verbose_default = conf.get("PK_VERBOSE", "0").lower() in ("1", "on", "yes", "true")
         self.upstream_branch = conf.get("PK_UPSTREAM_BRANCH", "main")
         # QCDX paths of the kit; sync_pairs maps each to where it is here.
         self.sync_paths = conf.get(
@@ -316,6 +326,7 @@ class Pk:
         self.sync_state = self.layout.rel("helpers", "pk/upstream.conf")
 
         self.cmd = ""
+        self.argv: List[str] = []
         self.type = ""
         self.cross = ""
         self.variant = ""
@@ -354,6 +365,7 @@ class Pk:
         self.want_tests = "OFF"
         self.deps_changed = False
         self.report_lines: List[str] = []
+        self._runner: Optional[Runner] = None
 
     @property
     def prefix(self) -> str:
@@ -363,8 +375,22 @@ class Pk:
     def project(self) -> str:
         return self.v.project
 
+    @property
+    def loud(self) -> bool:
+        """Print every command pk runs (--verbose or --dry-run)."""
+        return self.verbose or self.dry_run
+
+    @property
+    def runner(self) -> Runner:
+        if self._runner is None:
+            # the project's own readers (see pklib/readers/__init__.py) come after the kit's
+            readers.load([self.layout.path(self.root, "helpers", "pk/readers")])
+            self._runner = Runner(self.root, self.verbose, self.dry_run)
+        return self._runner
+
     def step(self, message: str) -> None:
-        out(f"\n{C.green}==>{C.reset} {C.bold}{message}{C.reset}")
+        gap = "\n" if self.loud else ""  # quiet steps are one line each, no blank line between
+        out(f"{gap}{C.green}==>{C.reset} {C.bold}{message}{C.reset}")
 
     def info(self, message: str) -> None:
         out(f"{C.dim}  {message}{C.reset}")
@@ -372,17 +398,47 @@ class Pk:
     def warn(self, message: str) -> None:
         err(f"{C.yellow}warning:{C.reset} {message}")
 
-    def die(self, message: str) -> None:
-        err(f"{C.red}error:{C.reset} {message}")
-        raise SystemExit(1)
+    def die(self, message: str, code: str = "PK604", why: str = "", fixes: Sequence[Dict[str, object]] = (),
+            details: Sequence[str] = (), log: str = "", status: int = 1, docs: Sequence[str] = ()) -> None:
+        """Reports the error (see problems.py), records it for 'pk fix' and
+        'pk explain', and exits with `status`."""
+        problems.report(Problem(code, message, why, fixes, details, log, docs, status), self.root, self.argv,
+                        self.self_name)
+        raise SystemExit(status)
 
-    def usage_die(self, message: str) -> None:
-        err(f"{C.red}error:{C.reset} {message}")
-        if self.cmd:
-            err(f"run '{self.self_name} help {self.cmd}' for what it accepts")
-        else:
-            err(f"run '{self.self_name} help' for the command list")
-        raise SystemExit(2)
+    def step_failed(self, step: str, tool: str, result: "Result", message: str, **context: object) -> None:
+        """Explains a failed step from its output (the readers know the
+        tool) and exits."""
+        context.setdefault("profiles", [self.layout.rel("profiles", self.native_profile)]
+                           + ([self.layout.rel("profiles", self.cross)] if self.cross else []))
+        context.update(root=self.root, verbose=self.verbose)
+        code, why, fixes, details, docs = problems.diagnose(step, tool, result.text, context)
+        self.die(message, code, why, fixes, details, result.log, docs=docs)
+
+    def build_tool(self, tree: str) -> str:
+        """The tool 'cmake --build' runs in `tree`, from its generator."""
+        generator = (cache_get(tree, "CMAKE_GENERATOR") or "").lower()
+        for word, tool in (("ninja", "ninja"), ("makefiles", "make"), ("visual studio", "msbuild"),
+                           ("xcode", "xcodebuild")):
+            if word in generator:
+                return tool
+        return generator or "ninja"
+
+    def usage_die(self, message: str, code: str = "PK106", fixes: Sequence[Dict[str, object]] = ()) -> None:
+        topic = f"{self.self_name} help {self.cmd}" if self.cmd else f"{self.self_name} help"
+        self.die(message, code, fixes=[*fixes, fix_hint(f"'{topic}' lists what {self.cmd or 'pk'} takes")],
+                 status=2)
+
+    def corrected(self, wrong: str, right: str) -> List[str]:
+        """The command line that failed with `wrong` replaced by `right`, as a
+        word, a --flag=VALUE value or a -xVALUE value."""
+        def fixed(word: str) -> str:
+            if word == wrong:
+                return right
+            if word.endswith("=" + wrong) or (len(word) == len(wrong) + 2 and word[0] == "-" and word.endswith(wrong)):
+                return word[:len(word) - len(wrong)] + right
+            return word
+        return ["pk", *[fixed(word) for word in self.argv]]
 
     def show(self, argv: List[str]) -> None:
         out(f"{C.yellow}+{C.reset} {shown(argv)}")
@@ -392,7 +448,8 @@ class Pk:
         return 0 if self.dry_run else run(argv, cwd=cwd)
 
     def remove(self, path: str) -> None:
-        self.show(["rm", "-rf", path])
+        if self.loud:
+            self.show(["rm", "-rf", path])
         if not self.dry_run:
             remove(os.path.join(self.root, path))
 
@@ -406,20 +463,24 @@ class Pk:
             return "brew install llvm" if clang_tool else f"brew install {tool}"
         return f"sudo apt install {tool}   (or your distribution's package)"
 
+    def install_fix(self, tool: str) -> Dict[str, object]:
+        hint = self.install_hint(tool)
+        if hint.startswith(("pacman ", "brew ")):  # no sudo, nothing to guess: pk fix may run it
+            return fix_run(hint.split(), f"install {tool}")
+        return fix_hint(hint)
+
     def require_tools(self, *tools: str) -> None:
         missing = [tool for tool in tools if not have(tool)]
         if not missing:
             return
-        err(f"{C.red}error:{C.reset} {self.cmd} needs: {' '.join(missing)}")
-        for tool in missing:
-            err(f"  install {tool}: {self.install_hint(tool)}")
-        raise SystemExit(1)
+        self.die(f"{self.cmd} needs {' and '.join(missing)}, which {'is' if len(missing) == 1 else 'are'} not on PATH",
+                 "PK300", fixes=[self.install_fix(tool) for tool in missing])
 
-    def package_tool(self, args: List[str]) -> int:
+    def package_tool(self, args: List[str], runner: Optional[Callable[[List[str]], int]] = None) -> int:
         from . import package
 
         try:
-            return package.main(args, self.root)
+            return package.main(args, self.root, runner)
         except SystemExit as stop:
             return exit_code(stop)
 
@@ -438,7 +499,7 @@ class Pk:
             "variant": "use a separate tree build/<preset>-NAME that remembers its own options",
             "update": "re-run Conan even when the dependencies look current",
             "dry": "print every command without running anything",
-            "verbose": "show full compiler and linker command lines",
+            "verbose": "every command and all of its output, live, the tools at their most detailed",
             "tests": "build the test suite; off by default, 'test' turns it on",
             "apps": f"build the applications under {self.layout.rel('apps')}/",
             "lib": "library artifacts: static, shared, both or none",
@@ -462,7 +523,7 @@ class Pk:
             "fix": "create Conan's default profile when it is missing",
             "consumer": "skip building a consumer project against stage/",
             "cache": "also remove this package from the local Conan cache",
-            "yes": "do not ask before deleting",
+            "yes": "do not ask first",
             "from": "template to sync from: a URL (remembered) or a local clone (this sync only)",
             "branch": f"template branch, default {self.upstream_branch} (remembered)",
             "base": "template commit the kit currently matches, if pk guesses wrong",
@@ -486,6 +547,8 @@ class Pk:
             "sync": "sync [--from URL|PATH] [--branch NAME] [--base COMMIT] [--no-commit] [-n]",
             "format": "format [--check] [path...]",
             "help": "help [command]",
+            "fix": "fix [--yes] [-n]",
+            "explain": "explain [CODE]",
             "shell-init": "shell-init [bash|powershell]",
         }.get(command, command)
 
@@ -510,6 +573,8 @@ class Pk:
             "memcheck": [f"{s} memcheck"],
             "sanitize": [f"{s} sanitize", f"{s} sanitize --sanitize=thread"],
             "format": [f"{s} format", f"{s} format --check"],
+            "fix": [f"{s} fix", f"{s} fix -n", f"{s} fix --yes"],
+            "explain": [f"{s} explain", f"{s} explain PK401", f"{s} explain --list"],
             "doctor": [f"{s} doctor", f"{s} doctor --fix"],
             "verify": [f"{s} verify list", f"{s} verify run --native --build_type=Debug"],
             "package": [f"{s} package create", f"{s} package help"],
@@ -563,6 +628,11 @@ class Pk:
                       "Your build tree and its options are not touched."],
             "shell-init": ["Without an argument: powershell when started outside an MSYS2 shell on",
                            "Windows, bash everywhere else."],
+            "fix": ["Every error pk reports is kept in build/pk-last-error.json with its fix. 'fix'",
+                    "shows what it will do, asks, does it, then runs the command that failed again.",
+                    "Errors only you can fix (a typo in your code) are shown again instead."],
+            "explain": ["Every error has a code (error[PK401]). 'explain CODE' says what it means, the",
+                        "usual causes and where to read more; 'explain --list' lists every code."],
         }
         return table.get(command, [])
 
@@ -594,7 +664,9 @@ class Pk:
             (f"{s} status", "what is configured and how"),
             (f"{s} help build", "every flag 'build' accepts"),
         ])
-        out("\nEvery command prints the Conan/CMake commands it runs; -n only prints them.")
+        out("\nEach step prints one line, its output goes to build/pk-logs/; -v (--verbose) shows every")
+        out("command and all of its output, -n only prints the commands. When something fails,")
+        out(f"'{s} fix' fixes it and '{s} explain' says more.")
         return 0
 
     def help_command(self, command: str) -> int:
@@ -621,7 +693,7 @@ class Pk:
 
     def flag_allowed(self, flag: str) -> None:
         if not self.flag_ok(flag):
-            self.usage_die(f"'{self.cmd}' does not take {FLAG_SPELLING[flag]}")
+            self.usage_die(f"'{self.cmd}' does not take {FLAG_SPELLING[flag]}", "PK103")
 
     def add_option(self, name: str, value: str) -> None:
         if not name.startswith(f"{self.prefix}_"):
@@ -657,7 +729,7 @@ class Pk:
             flag = VALUE_FLAGS.get(key)
             if flag is None:
                 if arg.startswith("-"):
-                    self.usage_die(f"unknown flag '{arg}'")
+                    self.unknown_flag(arg)
                 build_type = parse_type(arg)
                 if not self.type and self.flag_ok("type") and build_type:
                     self.type = build_type
@@ -668,22 +740,38 @@ class Pk:
             self.flag_allowed(flag)
             if not sep:
                 if index >= len(args):
-                    self.usage_die(f"{arg} needs a value")
+                    self.usage_die(f"{arg} needs a value", "PK104",
+                                   [fix_hint(f"{arg}=VALUE    ({FLAG_SPELLING[flag]})")])
                 value = args[index]
                 index += 1
             self.set_value_flag(flag, value)
+
+    def unknown_flag(self, arg: str) -> None:
+        name, sep, value = arg.partition("=")
+        spelled = [part.split("=", 1)[0] for flag in COMMAND_FLAGS.get(self.cmd, [])
+                   for part in FLAG_SPELLING[flag].replace(",", " ").split() if part.startswith("--")]
+        right = problems.closest(name, spelled)
+        fixes = [fix_run(self.corrected(arg, right + sep + value), f"{right}, not {name}", rerun=False)] \
+            if right else []
+        self.usage_die(f"unknown flag '{arg}'", "PK102", fixes)
+
+    def bad_value(self, message: str, wrong: str, choices: Sequence[str]) -> None:
+        right = problems.closest(wrong.lower(), choices)
+        fixes = [fix_run(self.corrected(wrong, right), f"{right}, not {wrong}", rerun=False)] if right else []
+        self.usage_die(message, "PK105", fixes)
 
     def set_value_flag(self, flag: str, value: str) -> None:
         if flag == "type":
             build_type = parse_type(value)
             if not build_type:
-                self.usage_die(f"unknown build type '{value}'")
+                self.bad_value(f"unknown build type '{value}': Debug, Release, RelWithDebInfo or MinSizeRel",
+                               value, ["debug", "release", "relwithdebinfo", "minsizerel"])
             self.type = build_type or ""
         elif flag == "cross":
             self.cross = value
         elif flag == "variant":
             if not value or "/" in value or "\\" in value or " " in value:
-                self.usage_die("variant names are one word without '/'")
+                self.usage_die("variant names are one word without '/'", "PK105")
             self.variant = value
         elif flag == "sanitize":
             self.add_option("SANITIZE", value)
@@ -691,11 +779,11 @@ class Pk:
             kinds = {"static": "STATIC", "shared": "SHARED", "both": "STATIC+SHARED",
                      "static+shared": "STATIC+SHARED", "none": "NONE"}
             if value.lower() not in kinds:
-                self.usage_die(f"--lib takes static, shared, both or none, not '{value}'")
+                self.bad_value(f"--lib takes static, shared, both or none, not '{value}'", value, list(kinds))
             self.add_option("LIBRARY_TYPE", kinds[value.lower()])
         elif flag in ("option", "define"):
             if "=" not in value:
-                self.usage_die(f"{'-O' if flag == 'option' else '-D'} takes NAME=VALUE, got '{value}'")
+                self.usage_die(f"{'-O' if flag == 'option' else '-D'} takes NAME=VALUE, got '{value}'", "PK105")
             if flag == "option":
                 name, _, option_value = value.partition("=")
                 self.add_option(name, option_value)
@@ -703,7 +791,7 @@ class Pk:
                 self.config_defs.append(value)
         elif flag == "jobs":
             if not value.isdigit():
-                self.usage_die(f"--jobs takes a number, not '{value}'")
+                self.usage_die(f"--jobs takes a number, not '{value}'", "PK105")
             self.jobs = value
         elif flag == "target":
             self.targets.append(value)
@@ -739,11 +827,13 @@ class Pk:
 
     def select(self) -> None:
         if not have("cmake"):
-            self.die("cmake is not on PATH")
+            self.die("cmake is not on PATH", "PK300",
+                     fixes=[fix_hint("python -m pip install cmake    (or: pipx install \"qcdx[tools]\")")])
         if not self.type:
             build_type = parse_type(self.default_type)
             if not build_type:
-                self.die(f"PK_DEFAULT_TYPE='{self.default_type}' is not a build type")
+                self.die(f"PK_DEFAULT_TYPE='{self.default_type}' is not a build type", "PK202",
+                         fixes=[fix_hint(f"set PK_DEFAULT_TYPE=Debug in {self.layout.rel('helpers', 'pk/pk.conf')}")])
             self.type = build_type or ""
         self.type_lower = self.type.lower()
 
@@ -751,21 +841,25 @@ class Pk:
             if self.cross.startswith("cross-"):
                 self.cross = self.cross[len("cross-"):]
             if not os.path.isfile(self.layout.path(self.root, "profiles", self.cross)):
-                self.usage_die(f"no {self.layout.rel('profiles', self.cross)}; cross targets here: "
-                               f"{' '.join(self.cross_names())}")
+                names = self.cross_names()
+                right = problems.closest(self.cross, names)
+                fixes = [fix_run(self.corrected(self.cross, right), f"{right}, not {self.cross}", rerun=False)] \
+                    if right else []
+                self.die(f"no cross target '{self.cross}' (no {self.layout.rel('profiles', self.cross)})", "PK203",
+                         f"cross targets here: {' '.join(names) or 'none'}", fixes, status=2)
             self.preset = f"{self.cross}-{self.type_lower}"
         else:
             self.preset = f"native-{self.type_lower}"
 
         dirs = self.preset_dirs(self.preset)
         if dirs is None:
-            self.die(f"CMakePresets.json has no configure preset '{self.preset}'")
+            self.die(f"CMakePresets.json has no configure preset '{self.preset}'", "PK204")
             return
         self.tree, self.toolchain = dirs
         if self.variant:
             self.tree = f"{self.tree}-{self.variant}"
         if not self.toolchain:
-            self.die(f"preset '{self.preset}' has no toolchainFile, pk needs Conan's")
+            self.die(f"preset '{self.preset}' has no toolchainFile, pk needs Conan's", "PK204")
         self.conan_dir = os.path.dirname(os.path.dirname(self.toolchain))
         self.platform_label = f"cross {self.cross}" if self.cross else "native"
 
@@ -811,7 +905,7 @@ class Pk:
             return
         if self.update:
             why = "--update given"
-        self.step(f"deps {build_type} ({label}): {why}")
+        heading = f"deps {build_type} ({label}): {why}"
 
         args = [f"--build_type={build_type}"]
         if os.path.isfile(self.layout.rel("profiles", self.native_profile)):
@@ -820,15 +914,27 @@ class Pk:
             args.append(f"--host-profile={cross}")
         skip = "False" if want_tests else "True"
         args += ["--", "-c", f"tools.build:skip_test={skip}", "-c", f"tools.graph:skip_test={skip}"]
+        if self.verbose:
+            args.append("-vvv")
         if self.cmd == "deps":
             args += self.extra
 
+        results = []
+
+        def conan(argv: List[str]) -> int:
+            results.append(self.runner.run(argv, heading, "conan", f"{os.path.basename(self.tree)}.deps"))
+            return results[-1].status
+
         if self.dry_run:
-            self.package_tool(["install", "--dry-run", *args])
+            self.package_tool(["install", "--dry-run", *args], conan)
             self.deps_changed = True
             return
-        if self.package_tool(["install", *args]) != 0:
-            self.die(f"conan install failed for {build_type} ({label})")
+        if self.package_tool(["install", *args], conan) != 0:
+            message = f"conan install failed for {build_type} ({label})"
+            if not results:
+                self.die(message, "PK400")
+            profiles = [self.layout.rel("profiles", self.native_profile)] + ([host_profile] if host_profile else [])
+            self.step_failed("deps", "conan", results[-1], message, profiles=profiles)
         with open(os.path.join(conan_dir, STAMP_NAME), "w", newline="\n") as file:
             file.write(f"key={self.deps_key(host_profile)}\ntests={1 if want_tests else 0}\n")
         self.deps_changed = True
@@ -840,7 +946,7 @@ class Pk:
             return
         native = self.preset_dirs(f"native-{self.type_lower}")
         if native is None:
-            self.die(f"no native-{self.type_lower} preset for host tools")
+            self.die(f"no native-{self.type_lower} preset for host tools", "PK204")
             return
         tools_tree, native_toolchain = tools[0], native[1]
 
@@ -852,13 +958,27 @@ class Pk:
         self.deps_changed = saved
 
         if cache_get(tools_tree, "CMAKE_BUILD_TYPE") != self.type or native_changed:
-            self.step(f"host tools {self.type}")
             self.remove(tools_tree)
-            if self.run(["cmake", "--preset", "host-tools", f"-DCMAKE_BUILD_TYPE={self.type}",
-                         f"-DCMAKE_TOOLCHAIN_FILE={native_path(os.path.join(self.root, native_toolchain))}"]):
-                self.die("host-tools configure failed")
-        if self.run(["cmake", "--build", tools_tree]):
-            self.die("host-tools build failed")
+            self.cmake_step(["cmake", "--preset", "host-tools", f"-DCMAKE_BUILD_TYPE={self.type}",
+                             f"-DCMAKE_TOOLCHAIN_FILE={native_path(os.path.join(self.root, native_toolchain))}"],
+                            f"configure host tools {self.type}", "host-tools.configure", "host-tools configure failed")
+        self.build_step(["cmake", "--build", tools_tree, *(["-v"] if self.verbose else [])],
+                        f"build host tools {tools_tree}", "host-tools.build", "host-tools build failed", tools_tree)
+
+    def cmake_step(self, args: List[str], heading: str, log: str, failed: str) -> None:
+        """Runs a CMake configure, explaining a failure."""
+        if self.verbose:
+            args = [*args, "--log-level=TRACE"]
+        result = self.runner.run(args, heading, "cmake", log)
+        if result.status:
+            self.step_failed("configure", "cmake", result, failed)
+
+    def build_step(self, args: List[str], heading: str, log: str, failed: str, tree: str) -> None:
+        """Runs a 'cmake --build', explaining a failure."""
+        tool = self.build_tool(tree)
+        result = self.runner.run(args, heading, tool, log)
+        if result.status:
+            self.step_failed("build", tool, result, failed)
 
     def decide_tests(self, needs: bool) -> None:
         cached = cache_get(self.tree, f"{self.prefix}_BUILD_TESTS")
@@ -873,7 +993,9 @@ class Pk:
 
         if self.cross and self.want_tests == "ON":
             if needs:
-                self.die(f"'{self.cmd}' runs binaries, a cross build cannot")
+                self.die(f"'{self.cmd}' runs binaries, a cross build cannot", "PK301",
+                         fixes=[fix_hint(f"{self.self_name} build -x {self.cross}    (builds, runs nothing)")],
+                         status=2)
             self.warn("tests are built but not run for cross targets")
 
     def configure(self, force: bool) -> None:
@@ -906,7 +1028,6 @@ class Pk:
             self.info(f"configure {self.tree}: up to date")
             return
         variant = f" ({self.variant})" if self.variant else ""
-        self.step(f"configure {self.preset}{variant}: {reason}")
         args = ["cmake", "--preset", self.preset]
         if self.variant:
             args += ["-B", self.tree]
@@ -915,8 +1036,8 @@ class Pk:
         args += [f"-D{definition}" for definition in defs]
         if self.cmd == "configure":
             args += self.extra
-        if self.run(args):
-            self.die("configure failed")
+        self.cmake_step(args, f"configure {self.preset}{variant}: {reason}", f"{os.path.basename(self.tree)}.configure",
+                        f"configure failed for {self.preset}{variant}")
 
     def prepare(self, needs_tests: bool, force_configure: bool) -> None:
         self.select()
@@ -939,9 +1060,9 @@ class Pk:
             args += ["--target", *chosen]
         if self.cmd in ("build", "rebuild", "install", "analyze") and self.extra:
             args += ["--", *self.extra]
-        self.step(f"build {self.tree}")
-        if self.run(args):
-            self.die("build failed")
+        what = f" ({' '.join(chosen)})" if chosen else ""
+        self.build_step(args, f"build {self.tree}{what}", f"{os.path.basename(self.tree)}.build",
+                        f"build failed in {self.tree}", self.tree)
 
     def ctest(self) -> int:
         args = ["ctest", "--test-dir", self.tree, "--output-on-failure"]
@@ -951,13 +1072,25 @@ class Pk:
             args += ["-R", self.filter]
         if self.label:
             args += ["-L", self.label]
+        if self.verbose:
+            args.append("-VV")
         args += self.extra
-        self.step(f"test {self.tree}")
-        return self.run(args)
+        result = self.runner.run(args, f"test {self.tree}", "ctest", f"{os.path.basename(self.tree)}.test")
+        if result.status:
+            code, why, fixes, details, docs = problems.diagnose("test", "ctest", result.text, {"root": self.root})
+            problems.report(Problem(code, "tests failed", why, fixes, details, result.log, docs), self.root,
+                            self.argv, self.self_name)
+        return result.status
 
     def no_positionals(self) -> None:
         if self.positional:
-            self.usage_die(f"unexpected argument '{self.positional[0]}'")
+            word = self.positional[0]
+            right = problems.closest(word.lower(), ["debug", "release", "relwithdebinfo", "minsizerel"]) \
+                if self.flag_ok("type") else ""
+            fixes = [fix_run(self.corrected(word, right), f"the build type {right}", rerun=False)] if right else []
+            self.usage_die(f"unexpected argument '{word}'", "PK106",
+                           [*fixes, fix_hint(f"{self.self_name} {self.cmd} -- {' '.join(self.positional)}    "
+                                             "(when it is meant for the tool pk runs)")])
 
     def cmd_deps(self) -> int:
         self.no_positionals()
@@ -993,7 +1126,8 @@ class Pk:
     def cmd_test(self) -> int:
         self.no_positionals()
         if not self.layout.has("tests"):
-            self.die("this project's tree leaves the tests out ('pk tree' shows it)")
+            self.die("this project's tree leaves the tests out", "PK205",
+                     fixes=[fix_hint(f"{self.self_name} tree    (shows the tree; 'tree apply' changes it)")])
         self.prepare(True, False)
         self.build()
         return self.ctest()
@@ -1003,25 +1137,31 @@ class Pk:
         self.prepare(False, False)
         self.build()
         prefix = self.prefix_dir or self.stage_dir
-        self.step(f"install into {prefix}")
-        if self.run(["cmake", "--install", self.tree, "--prefix", native_path(prefix)]):
-            self.die("install failed")
+        result = self.runner.run(["cmake", "--install", self.tree, "--prefix", native_path(prefix),
+                                  *(["-v"] if self.verbose else [])],
+                                 f"install into {prefix}", "cmake-install", f"{os.path.basename(self.tree)}.install")
+        if result.status:
+            self.step_failed("install", "cmake-install", result, f"install into {prefix} failed")
         return 0
 
     def cmd_run(self) -> int:
         if len(self.positional) > 1:
-            self.usage_die(f"run takes one APP, got: {' '.join(self.positional)} (app args go after --)")
+            self.usage_die(f"run takes one APP, got: {' '.join(self.positional)}", "PK106",
+                           [fix_hint(f"{self.self_name} run {self.positional[0]} -- {' '.join(self.positional[1:])}"
+                                     "    (app arguments go after --)")])
         app = self.positional[0] if self.positional else ""
         if not app:
             apps = self.app_names()
             if len(apps) == 1:
                 app = apps[0]
             elif not apps:
-                self.die(f"no {self.layout.rel('apps')}/ directories found, name the executable: run NAME")
+                self.die(f"no {self.layout.rel('apps')}/ directories found", "PK701",
+                         fixes=[fix_hint(f"{self.self_name} run NAME    (name the executable)")], status=2)
             else:
-                self.usage_die(f"several apps, pick one: {' '.join(apps)}")
+                self.usage_die(f"several apps: {' '.join(apps)}", "PK107",
+                               [fix_hint(f"{self.self_name} run {app_name}") for app_name in apps[:3]])
         if self.cross:
-            self.die("cannot run a cross-compiled binary on this machine")
+            self.die("cannot run a cross-compiled binary on this machine", "PK301", status=2)
         self.prepare(False, False)
 
         target = f"{app}_app"
@@ -1039,7 +1179,9 @@ class Pk:
             bin_dir = os.path.join(self.tree, "bin")
             found = sorted(n for n in os.listdir(bin_dir) if os.path.isfile(os.path.join(bin_dir, n))) \
                 if os.path.isdir(bin_dir) else []
-            self.die(f"no {exe}; executables in {self.tree}/bin: {' '.join(found) or 'none'}")
+            right = problems.closest(app, [os.path.splitext(name)[0] for name in found])
+            self.die(f"no {exe}", "PK701", f"executables in {self.tree}/bin: {' '.join(found) or 'none'}",
+                     [fix_run(self.corrected(app, right), f"{right}, not {app}", rerun=False)] if right else [])
 
         generators = os.path.join(self.conan_dir, "generators")
         names = ("conanrun.bat", "conanrun.sh") if os.name == "nt" else ("conanrun.sh",)
@@ -1051,12 +1193,14 @@ class Pk:
         command = [exe_path, *self.extra]
         env = None
         if run_script:
-            self.info(f"with the Conan run environment {run_script.replace(os.sep, '/')}")
+            if self.loud:
+                self.info(f"with the Conan run environment {run_script.replace(os.sep, '/')}")
             if not self.dry_run:
                 env = script_env(run_script)
                 if env is None:
                     self.warn(f"could not read {run_script}, running without it")
-        self.show(command)
+        if self.loud:
+            self.show(command)
         if self.dry_run:
             return 0
         return run(command, cwd=self.orig_pwd, env=env)
@@ -1075,7 +1219,9 @@ class Pk:
 
     def cmd_memcheck(self) -> int:
         if host_platform() != "linux":
-            self.die("memcheck needs Valgrind, which pk only supports on Linux")
+            self.die("memcheck needs Valgrind, which pk only supports on Linux", "PK301",
+                     fixes=[fix_hint(f"{self.self_name} sanitize    (address and undefined behaviour checks)")],
+                     status=2)
         self.require_tools("valgrind")
         self.add_option("VALGRIND", "ON")
         self.label = self.label or "valgrind"
@@ -1183,7 +1329,8 @@ class Pk:
                 self.info("dry run: nothing deleted")
             elif self.assume_yes or self.ask("delete the above?"):
                 for path in paths:
-                    self.show(["rm", "-rf", path])
+                    if self.loud:
+                        self.show(["rm", "-rf", path])
                     remove(path)
                 try:
                     os.rmdir(os.path.join(self.root, ".cache"))
@@ -1212,7 +1359,9 @@ class Pk:
 
     def ask(self, prompt: str) -> bool:
         if not sys.stdin.isatty():
-            self.die("not asking on a non-interactive input: pass --yes to delete")
+            self.die("not asking on a non-interactive input", "PK302",
+                     fixes=[fix_hint(f"{self.self_name} {self.cmd} --yes    (when deleting is really wanted)")],
+                     status=2)
         return confirm(prompt, ("y", "yes"))
 
     def report(self, *fields: str) -> None:
@@ -1227,7 +1376,8 @@ class Pk:
     def cmd_stage(self) -> int:
         self.no_positionals()
         if not self.stage_dir_is_safe():
-            self.die(f"PK_STAGE_DIR='{self.stage_dir}' must be a directory inside the project")
+            self.die(f"PK_STAGE_DIR='{self.stage_dir}' must be a directory inside the project", "PK202",
+                     fixes=[fix_hint(f"set PK_STAGE_DIR=stage in {self.layout.rel('helpers', 'pk/pk.conf')}")])
         self.prepare(False, False)
         self.build()
 
@@ -1433,16 +1583,20 @@ class Pk:
         paths = [up for up, _ in self.sync_pairs]
         here = [local for _, local in self.sync_pairs]
         if not self.git_ok("rev-parse", "--verify", "-q", "HEAD"):
-            self.die("sync needs at least one commit in this repository")
+            self.die("sync needs at least one commit in this repository", "PK800",
+                     fixes=[fix_hint('git add -A && git commit -m "First commit"')])
         if self.git_ok("rev-parse", "--verify", "-q", "MERGE_HEAD"):
-            self.die("finish the merge in progress first")
+            self.die("a merge is in progress", "PK800",
+                     fixes=[fix_hint("finish it (git commit) or drop it (git merge --abort)")])
         if not self.git_ok("diff", "--cached", "--quiet"):
-            self.die("you have staged changes: commit or unstage them first, so the sync commit holds only the kit")
+            self.die("you have staged changes", "PK800", "the sync commit must hold only the kit",
+                     [fix_hint("commit them, or unstage them: git restore --staged .")])
         dirty = lines(["git", "status", "--porcelain", "--", *here, self.sync_state])
         if dirty:
-            for line in dirty:
-                err(f"  {line}")
-            self.die("uncommitted changes in synced paths (above): commit or stash them first")
+            self.die("uncommitted changes in synced paths", "PK800", details=[f"  {line}" for line in dirty],
+                     fixes=[fix_run(["git", "stash", "push", "--", *here, self.sync_state],
+                                    "stash them ('git stash pop' brings them back)"),
+                            fix_hint("or commit them")])
 
         state_url = self.state_get("url")
         url = self.sync_from or state_url or self.upstream_url
@@ -1458,7 +1612,8 @@ class Pk:
         fetch = ["git", "fetch", "--no-tags", "--quiet", url, f"+refs/heads/{branch}:{UPSTREAM_REF}"]
         self.show(fetch)
         if run(fetch) != 0:
-            self.die(f"could not fetch branch '{branch}' of {url}")
+            self.die(f"could not fetch branch '{branch}' of {url}", "PK801",
+                     fixes=[fix_hint(f"{self.self_name} sync --from /path/to/a/QCDX/clone")])
 
         tip = output(["git", "rev-parse", f"{UPSTREAM_REF}^0"])
         if self.git_ok("merge-base", "--is-ancestor", "HEAD", tip):
@@ -1469,7 +1624,7 @@ class Pk:
         if self.sync_base:
             base = output(["git", "rev-parse", "--verify", "-q", f"{self.sync_base}^0"])
             if not base:
-                self.die(f"--base {self.sync_base} is not a commit in {name}")
+                self.die(f"--base {self.sync_base} is not a commit in {name}", "PK802", status=2)
             self.info(f"base: {self.sync_base} (--base)")
         elif state_commit and self.git_ok("merge-base", "--is-ancestor", state_commit, tip):
             base = state_commit
@@ -1481,7 +1636,8 @@ class Pk:
             self.step(f"find the {name} commit this kit matches")
             found = self.detect_base(tip)
             if found is None:
-                self.die(f"no commit in {name} touches: {' '.join(paths)}")
+                self.die(f"no commit in {name} touches: {' '.join(paths)}", "PK802",
+                         fixes=[fix_hint(f"{self.self_name} sync --base COMMIT    (the {name} commit the kit is)")])
                 return 1
             base, changed = found
             self.info(f"base: {self.short_log(base)}")
@@ -1507,7 +1663,7 @@ class Pk:
                 run(["git", "add", self.sync_state])
                 if not self.no_commit:
                     if self.run(["git", "commit", "-q", "-m", f"Record projectkit upstream {name} {short}"]):
-                        self.die("commit failed; the change is staged, commit it yourself")
+                        self.die("commit failed; the change is staged, commit it yourself", "PK803")
                     self.info(f"recorded {name} {short} in {self.sync_state}")
                 else:
                     self.info(f"staged {self.sync_state}; commit it when ready")
@@ -1552,7 +1708,8 @@ class Pk:
         self.step("commit")
         full_tip = output(["git", "rev-parse", tip])
         if self.run(["git", "commit", "-q", "-m", message, "-m", f"Upstream: {url} {branch} {full_tip}"]):
-            self.die(f'commit failed; the sync is staged, commit it yourself: git commit -m "{message}"')
+            self.die("commit failed; the sync is staged", "PK803",
+                     fixes=[fix_hint(f'git commit -m "{message}"')])
         for line in capture(["git", "show", "--stat", "--format=  %h %s", "HEAD"])[1].splitlines():
             out(f" {line}")
         return 0
@@ -1591,7 +1748,8 @@ class Pk:
 
         self.step(f"format {len(files)} files")
         for path in files:
-            if self.run(["clang-format", "-i", path]):
+            argv = ["clang-format", "-i", path]
+            if self.run(argv) if self.loud else run(argv):
                 return 1
         return 0
 
@@ -1763,6 +1921,11 @@ class Pk:
         out(f"{C.green}ready{C.reset}: try '{self.self_name} build'")
         return 0
 
+    def cmd_fix(self) -> int:
+        self.no_positionals()
+        script = os.path.join(self.root, *self.layout.rel("scripts", "pk.py").split("/"))
+        return problems.apply_fix(self.root, [sys.executable, script], self.assume_yes, self.dry_run, self.self_name)
+
     def cmd_shell_init(self, args: List[str]) -> int:
         shell = args[0].lower() if args else ""
         if not shell:
@@ -1774,7 +1937,7 @@ class Pk:
         elif shell == "bash":
             out(BASH_INIT.replace("@PYTHON@", native_path(python).replace('"', '\\"')))
         else:
-            self.usage_die(f"shell-init takes bash or powershell, not '{args[0]}'")
+            self.usage_die(f"shell-init takes bash or powershell, not '{args[0]}'", "PK105")
         return 0
 
     def cmd_words(self, args: List[str]) -> int:
@@ -1813,7 +1976,9 @@ class Pk:
             out("bash\npowershell")
         elif resolved == "tree":
             out("\n".join(["show", "check", "draw", "apply", "reset", "list", "help"] + pktree.preset_names()))
-        elif resolved not in ("format", "status", "doctor", "list", "rename", "full-clean", "sync", "tree"):
+        elif resolved == "explain":
+            out("\n".join(problems.CATALOG))
+        elif resolved not in ("format", "status", "doctor", "list", "rename", "full-clean", "sync", "tree", "fix"):
             words = ["debug", "release", "relwithdebinfo", "minsizerel"]
             if resolved == "run":
                 words += self.app_names()
@@ -1849,15 +2014,16 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
     if word == "__words":
         return pk.cmd_words(args)
 
+    pk.argv = list(argv)
     resolved, problem = resolve_command(word)
     if not resolved:
         if problem.startswith("ambiguous: "):
-            pk.usage_die(f"'{word}' could be: {problem[len('ambiguous: '):]}")
-        first = word[:1]
-        suggestions = [name for name in NAMES if word in name or (first and name.startswith(first))]
-        if suggestions:
-            pk.usage_die(f"unknown command '{word}', did you mean: {' '.join(suggestions)}?")
-        pk.usage_die(f"unknown command '{word}'")
+            pk.usage_die(f"'{word}' could be: {problem[len('ambiguous: '):]}", "PK101",
+                         [fix_hint(f"{pk.self_name} {name}") for name in problem[len("ambiguous: "):].split()[:4]])
+        right = problems.closest(word, NAMES + [w for row in COMMANDS for w in (row[2] + " " + row[3]).split()])
+        right = resolve_command(right)[0] if right else ""
+        fixes = [fix_run(pk.corrected(word, right), f"{right}, not {word}", rerun=False)] if right else []
+        pk.usage_die(f"unknown command '{word}'", "PK100", fixes)
     pk.cmd = resolved
 
     if resolved == "verify":
@@ -1876,12 +2042,14 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
         return bootstrap.main(args, root)
     if resolved == "dep":
         return pk.deps_tool(args)
+    if resolved == "explain":
+        return problems.explain(args, root, pk.self_name)
     if resolved == "help":
         if not args:
             return pk.help_overview()
         topic, _ = resolve_command(args[0])
         if not topic:
-            pk.usage_die(f"no command '{args[0]}'")
+            pk.usage_die(f"no command '{args[0]}'", "PK100")
         if topic == "dep":
             return pk.deps_tool(["help", *args[1:]])
         pk.cmd = topic
@@ -1890,15 +2058,20 @@ def _main(argv: List[str], given_root: Optional[str]) -> int:
         return pk.cmd_shell_init(args)
 
     pk.parse_args(args)
+    if not pk.verbose and pk.verbose_default:
+        pk.verbose = True
     started = time.monotonic()
     handler = getattr(pk, "cmd_" + resolved.replace("-", "_"))
     status = handler()
+    if status == 0 and resolved not in ("fix", "status", "list", "doctor") and not pk.dry_run:
+        problems.forget(root)
 
     if resolved in ("build", "test", "configure", "deps", "install", "stage", "rebuild", "analyze",
                     "memcheck", "sanitize"):
-        seconds = int(time.monotonic() - started)
+        seconds = time.monotonic() - started
+        gap = "\n" if pk.loud else ""
         if status == 0:
-            out(f"\n{C.green}done{C.reset} in {seconds}s")
+            out(f"{gap}{C.green}done{C.reset} in {seconds:.1f}s")
         else:
-            out(f"\n{C.red}failed{C.reset} after {seconds}s")
+            out(f"{gap}{C.red}failed{C.reset} after {seconds:.1f}s")
     return status

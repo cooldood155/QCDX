@@ -7,7 +7,7 @@ from conftest import requires_git
 # Checks the messages for a missing name and for --tree written without =
 def test_pk_new_explains_a_missing_name_and_a_spaced_value(pk):
     code, out = pk("new")
-    assert code == 2 and out.startswith("pk new: missing NAME")
+    assert code == 2 and "error[PK106]: pk new: missing NAME" in out
     code, out = pk("new", "probe", "--tree", "minimal")
     assert code == 2 and "--tree needs a value, written --tree=VALUE" in out
 

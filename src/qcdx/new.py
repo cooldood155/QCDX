@@ -16,7 +16,7 @@ import types
 from pathlib import Path
 from typing import List, Optional
 
-from . import registry, resources
+from . import errors, registry, resources
 from .layout import tree_part
 
 TEMPLATE_NAME = "qcdx"
@@ -271,26 +271,30 @@ def main(argv: List[str]) -> int:
         elif arg == "--force":
             force = True
         elif not sep and arg.startswith("--") and (arg[2:] in options or arg == "--omit"):
-            sys.stderr.write(f"pk new: {arg} needs a value, written {arg}=VALUE\n")
+            errors.report("PK104", f"pk new: {arg} needs a value, written {arg}=VALUE")
             return 2
         elif arg.startswith("-"):
-            sys.stderr.write(f"pk new: unknown option {arg}\n\n{USAGE}\n")
+            flags = [f"--{option}" for option in options] + ["--omit", "--no-git", "--force", "--help"]
+            right = errors.closest(key, flags)
+            errors.report("PK102", f"pk new: unknown option {arg}",
+                          fixes=([f"{right}, not {key}"] if right else []) + ["pk new --help    (every option)"])
             return 2
         elif not name:
             name = arg
         elif directory is None:
             directory = arg
         else:
-            sys.stderr.write(f"pk new: unexpected argument {arg}\n\n{USAGE}\n")
+            errors.report("PK106", f"pk new: unexpected argument {arg}", fixes=["pk new NAME [DIR] [flag...]"])
             return 2
     if not name:
-        sys.stderr.write(f"pk new: missing NAME\n\n{USAGE}\n")
+        errors.report("PK106", "pk new: missing NAME", fixes=["pk new NAME [DIR] [flag...]",
+                                                            "pk new --help    (every option)"])
         return 2
     try:
         target = create(name, directory, options["description"], options["version"], options["author"],
                         options["url"], options["license"], use_git, force, options["tree"], omit)
     except NewError as error:
-        sys.stderr.write(f"pk new: {error}\n")
+        errors.report("PK904", f"pk new: {error}")
         return 1
     registry.remember(target)
     shown = os.path.relpath(target) if not os.path.relpath(target).startswith("..") else str(target)

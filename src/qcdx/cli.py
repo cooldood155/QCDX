@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from . import new, registry, resources
+from . import errors, new, registry, resources
 from .layout import project_script, tree_part
 
 HELP = """\
@@ -27,6 +27,8 @@ usage:
                                 drawn (to copy and edit: pk tree minimal > my.tree)
   pk cmake-dir                  print the QCDX CMake package directory, for
                                 -DQCDX_DIR=... or CMAKE_PREFIX_PATH
+  pk explain [CODE]             what an error code (error[PK401]) means and how
+                                to fix it; --list lists them all
   pk --version                  QCDX version, and the kit version of this project
 
 Inside a project every other command (build, run, test, sync, ...) runs the
@@ -81,12 +83,13 @@ def list_projects(argv: List[str]) -> int:
         if arg == "--prune":
             prune = True
         else:
-            sys.stderr.write(f"pk list: unknown argument {arg}\nusage: pk list [--prune]\n")
+            errors.report("PK102", f"pk list: unknown argument {arg}", fixes=["pk list [--prune]"])
             return 2
     try:
         projects = registry.load()
     except registry.RegistryError as error:
-        sys.stderr.write(f"pk list: {error}\n")
+        errors.report("PK905", f"pk list: {error}", fixes=[f"delete {registry.registry_file()}; running pk "
+                                                           "inside a project adds it again"])
         return 1
 
     missing = [entry["path"] for entry in projects if not registry.exists(Path(entry["path"]))]
@@ -141,7 +144,7 @@ def tree_outside(argv: List[str]) -> int:
     try:
         tree = kit_tree.resolve(argv[0])
     except kit_tree.TreeError as error:
-        sys.stderr.write(f"pk tree: {error}\n")
+        errors.report("PK900", f"pk tree: {error}", fixes=["pk tree    (the trees there are)"])
         return 1
     print(tree.draw("NAME").replace("pk tree apply .pk/tree.txt", "pk new NAME --tree=THIS_FILE"), end="")
     return 0
@@ -171,6 +174,8 @@ def run(argv: List[str]) -> int:
     if command == "cmake-dir":
         print(resources.cmake_dir())
         return 0
+    if command == "explain" and project is None:
+        return errors.explain(argv[1:])
     if project is not None:
         return delegate(project, argv)
     if command == "list":
@@ -180,8 +185,11 @@ def run(argv: List[str]) -> int:
     if command in ("", "help", "-h", "--help"):
         print(HELP.format(version=resources.version(), where="\n\n(no project here)"))
         return 0
-    sys.stderr.write(f"pk: '{command}' needs a project, and there is none in {Path.cwd()} or above.\n"
-                     "     'pk new NAME' creates one.\n")
+    here = ("new", "list", "tree", "cmake-dir", "explain", "help", "--version")
+    right = errors.closest(command, here)
+    fixes = [f"pk {right}    ({right}, not {command}, works here)"] if right else []
+    errors.report("PK200", f"'pk {command}' needs a project, and there is none in {Path.cwd()} or above",
+                  fixes=[*fixes, "cd into a project, or 'pk new NAME' to create one"])
     return 2
 
 

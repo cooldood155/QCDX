@@ -33,6 +33,8 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from . import targets
 from . import tree as pktree
+from .problems import Problem
+from .problems import report as report_problem
 from .common import (BUILD_TYPES, C, capture, detect_project, entry, err, have, load_conf, out, remove,
                      repo_root, run, has_file, setup_output, walk_files)
 
@@ -898,7 +900,8 @@ def annotate(message: str) -> None:
     if os.environ.get("GITHUB_ACTIONS") == "true":
         err(f"::error::{first}" + (f"%0A{rest.replace(chr(10), '%0A')}" if rest else ""))
     else:
-        err(f"{C.red}error{C.reset}: {message}")
+        first, _, rest = message.partition("\n")
+        report_problem(Problem("PK902", first, details=[line for line in rest.splitlines() if line.strip()]))
 
 
 def usage() -> None:

@@ -120,7 +120,8 @@ Then check `conanfile.py` for `url` and `package_info`, and rewrite
 
 `doctor` checks the required and optional tools and the Conan profile.
 `build` installs the Conan dependencies, configures and builds, each only when
-needed, and prints every command before running it. `test` turns the tests on
+needed, one line per step (`-v` shows every command and all of its output,
+`build/pk-logs/` keeps it either way). `test` turns the tests on
 in the tree, installs Catch2 if the last dependency install skipped it, builds
 and runs ctest. To type `pk` instead of `./scripts/pk.py`, install the shell
 function for bash or PowerShell described in `PK.md`.

@@ -39,6 +39,37 @@ and/or fixes that directly impact users and is not logged in this document.
   Conan's output (every folder in `build/` with Conan's toolchain, and the
   presets Conan wrote). The next build only configures and compiles, it
   doesn't reinstall the dependencies.
+- Error codes: every error pk reports has one (`error[PK401]`) and the same
+  shape: `why` (the cause pk read from Conan's, CMake's or the compiler's
+  output), `fix` (what to do, or a change pk can make), `log` and `docs`
+  (this kit's documents, CMake's and Conan's). Conan's `ERROR` lines, CMake's
+  `CMake Error` block or the first failed compile come first, without the
+  rest of the output. Typos in commands, flags and build types name what
+  they most likely meant. An error the kit's CMake raises points at the line
+  of your `CMakeLists.txt` that called it, and says which files the build
+  noticed were removed. Errors are read by one module per tool
+  (`scripts/pklib/readers/`: CMake, ninja, GCC/Clang/MSVC, ctest, Conan), so
+  another tool is one more module, and a project can add its own in
+  `scripts/helpers/pk/readers/`. Known package bugs are recognized too, like
+  Conan Center's wxwidgets on MinGW looking for libraries under names the
+  build didn't use (`pk fix` sets the option that fixes it).
+- `pk fix`: applies the last error's fix after asking (runs the command, or
+  edits the file, e.g. a profile's `compiler.cstd` the compiler doesn't
+  take), then runs the command that failed again. `-n` shows the plan,
+  `--yes` doesn't ask.
+- `pk explain CODE`: what an error code means, its usual causes and where to
+  read more. Without a code it explains the last error; `--list` lists every
+  code. Works outside a project too.
+
+### Changed
+
+- `pk build`, `configure`, `deps`, `test`, `install` and the other build
+  commands are quiet: one line per step (with what the tool is doing right
+  now on a terminal, then its time), plus warnings, failing tests and errors.
+  The whole output of each step is kept in `build/pk-logs/`. `-v`/`--verbose`
+  shows every command and all of its output with Conan, CMake, the build tool
+  and ctest at their most detailed (it only added `cmake --build -v` before).
+  `PK_VERBOSE=1` makes verbose the default; `-n` still prints the commands.
 
 ### Fixed
 

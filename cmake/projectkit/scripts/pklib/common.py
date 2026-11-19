@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 import platform
 import re
 import shlex
@@ -22,7 +23,7 @@ class Colors:
     def __init__(self) -> None:
         """Initializes empty styling strings, ensuring colorless text safe
         fallbacks."""
-        self.bold = self.red = self.green = self.yellow = self.dim = self.reset = ""
+        self.bold = self.red = self.green = self.yellow = self.cyan = self.dim = self.reset = ""
 
 
 C = Colors()
@@ -58,8 +59,23 @@ def setup_output() -> None:
     if C.reset or os.environ.get("NO_COLOR") or not sys.stdout.isatty() or not _console_ansi():
         return
 
-    C.bold, C.red, C.green, C.yellow, C.dim, C.reset = (
-        "\033[1m", "\033[31m", "\033[32m", "\033[33m", "\033[2m", "\033[0m")
+    C.bold, C.red, C.green, C.yellow, C.cyan, C.dim, C.reset = (
+        "\033[1m", "\033[31m", "\033[32m", "\033[33m", "\033[36m", "\033[2m", "\033[0m")
+
+
+def link(text: str, target: str = "") -> str:
+    """Makes `text` a clickable terminal hyperlink (OSC 8) to `target`, a URL
+    or a file path, when colors are on. Terminals without OSC 8 support show
+    just the text; PK_LINKS=0 turns the links off."""
+    if not C.reset or os.environ.get("PK_LINKS") == "0":
+        return text
+    target = target or text
+    if "://" not in target:
+        try:
+            target = pathlib.Path(os.path.abspath(target)).as_uri()
+        except ValueError:
+            return text
+    return f"\033]8;;{target}\033\\{text}\033]8;;\033\\"
 
 
 def out(text: str = "") -> None:

@@ -1589,7 +1589,14 @@ def main(argv):
         repo = Repo(find_root(), args.profile, args.dry_run)
         return COMMANDS[args.command](repo, args)
     except PkDepError as exc:
-        print("{} {}".format(_c("31", "error:"), exc), file=sys.stderr)
+        # the shape of pklib/problems.py, which this standalone script cannot import
+        first, _, rest = str(exc).partition("\n")
+        if rest:
+            print(rest, file=sys.stderr)
+        print("{}{}: {}".format(_c("1;31", "error"), _c("2", "[PK410]"), _c("1", first)), file=sys.stderr)
+        print("  {}  {}".format(_c("36", "docs"), "cmake/projectkit/docs/PK_DEP.md (or: pk dep help)"),
+              file=sys.stderr)
+        print("        {}".format(_c("2", "pk explain PK410")), file=sys.stderr)
         return 1
     except KeyboardInterrupt:
         return 130

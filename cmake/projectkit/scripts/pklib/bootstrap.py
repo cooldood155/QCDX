@@ -14,6 +14,8 @@ from sys import stdin
 from typing import Iterator, List, Optional, Set
 
 from . import tree as pktree
+from .problems import Problem
+from .problems import report as report_problem
 from .names import kit_uses, name_forms, name_pattern, problem
 from .common import (C, capture, confirm, detect_project, entry, err, has_file, out, repo_root, run,
                      setup_output)
@@ -77,7 +79,7 @@ def matching_lines(pattern: "re.Pattern[bytes]", top: str, skip: Set[str], suffi
 
 
 def die(message: str) -> None:
-    err(f"{C.red}error{C.reset}  {message}")
+    report_problem(Problem("PK901", message))
     raise SystemExit(1)
 
 
