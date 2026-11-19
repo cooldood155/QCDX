@@ -73,6 +73,12 @@ and/or fixes that directly impact users and is not logged in this document.
 
 ### Fixed
 
+- `pk list` inside a project crashed with `KeyError` when listing libraries
+  because it looked up a non-existent `libraries` layout key instead of
+  `headers`.
+- Error reporting and `pk explain` crashed on Windows (`ValueError: path is
+  on mount ..., start on mount ...`) when formatting paths or doc links across
+  different drive letters, and could fail on non-UTF-8 console streams.
 - `pk dep check` and `pk dep rm` scanned the kit's CMake files as the project's
   when the kit isn't at `cmake/projectkit` (a minimal or `.pk/` tree). Now they
   skip the kit wherever the tree puts it.
@@ -83,12 +89,13 @@ and/or fixes that directly impact users and is not logged in this document.
 - `pk dep rm` and `pk dep lock --clean`: pruning `conan.lock` only looked at
   one profile (`native` by default). This caused every package not for the
   platform running the command to be dropped (gtk, glib, wayland, etc. for
-  Linux, dropped wehn `pd dep rm` ran from a Windows machine). The lock then
+  Linux, dropped when `pk dep rm` ran from a Windows machine). The lock then
   failed on those platforms. Pruning now checks every profile in `profiles/`,
   keeps an entry if any of them uses it, and drops nothing if one of their
   graphs can't be read. With more than one `--profile`, `pk dep lock --clean`
   also re-resolved the other profiles' packages to their newest versions; their
   pins stay now.
+
 
 ## [0.3.1] - 2026-11-09
 
